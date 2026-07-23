@@ -18,13 +18,20 @@ from SmartApi import SmartConnect
 
 def load_env(env_path=".env"):
     config = {}
+    # Read from environment variables first (GitHub Actions)
+    for k in ["ANGEL_CLIENT_ID", "ANGEL_PASSWORD", "ANGEL_API_KEY", "ANGEL_TOTP_SECRET"]:
+        if os.environ.get(k):
+            config[k] = os.environ.get(k)
+
+    # Fallback to local .env
     if os.path.exists(env_path):
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
-                    config[k.strip()] = v.strip()
+                    if k.strip() not in config:
+                        config[k.strip()] = v.strip()
     return config
 
 def compute_live_features(df):
@@ -219,9 +226,14 @@ def run_live_paper_trading_loop(min_prob=0.60):
     last_processed_candle = None
 
     while True:
+        now = datetime.now()
+        # Market Exit Condition: Stop at 03:30 PM (15:30)
+        if now.hour > 15 or (now.hour == 15 and now.minute >= 30):
+            print("Market Closed (15:30 IST). Stopping Paper Trading Engine for today.")
+            break
+
         try:
             to_date = datetime.now()
-            # Fetch today's candles starting from 09:15 AM
             from_date = to_date.replace(hour=9, minute=15, second=0, microsecond=0)
 
             historical_params = {
