@@ -1,0 +1,43 @@
+name: AngelAlgo Nifty Paper Trader
+
+on:
+  schedule:
+    # Runs Monday to Friday at 09:15 AM IST (03:45 AM UTC)
+    - cron: '45 3 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+
+jobs:
+  run-paper-trader:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy xgboost scikit-learn SmartApi pyotp
+
+    - name: Run Paper Trading Engine (Market Hours)
+      env:
+        ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
+        ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
+        ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
+        ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
+      run: |
+        python paper_trading_engine.py
+
+    - name: Commit & Push Daily Paper Trading Log
+      if: always()
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add paper_trades_log.csv
+        git commit -m "Auto-update daily paper trading results [skip ci]" || exit 0
+        git push

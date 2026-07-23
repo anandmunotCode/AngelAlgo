@@ -1,0 +1,14 @@
+# Environment variables (NEVER commit credentials)
+.env
+
+# Python Bytecode & Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Master datasets (large files kept local)
+nifty_1min_5y_master.csv
+nifty_1min_5y_features.csv
+
+# Logs & temp
+*.log
