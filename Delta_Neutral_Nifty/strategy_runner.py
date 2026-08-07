@@ -17,7 +17,7 @@ from .utils import (
     get_atm_strike, print_banner, print_position_table, format_pnl, format_delta,
 )
 from .angel_api import AngelOneAPI
-from .greeks_engine import find_strike_at_delta, calculate_portfolio_greeks
+from .greeks_engine import find_strike_at_delta, calculate_portfolio_greeks, bs_price
 from .position_manager import PositionManager
 from .adjustment_engine import AdjustmentEngine
 
@@ -79,13 +79,14 @@ class StrategyRunner:
                         self.pm.close_all("EXPIRY_CLOSE")
                     break
 
-                # Pre-market or weekend
-                if now.hour < config.MARKET_OPEN_HOUR:
+                # Pre-market or post-market check
+                if now.hour < config.MARKET_OPEN_HOUR or (now.hour == config.MARKET_OPEN_HOUR and now.minute < config.MARKET_OPEN_MINUTE):
                     logger.info("Pre-market. Waiting for 09:15 IST...")
-                    time.sleep(30)
+                    time.sleep(10)
                     continue
-                else:
-                    logger.info("Market closed for today.")
+                elif now.hour > config.MARKET_CLOSE_HOUR or (now.hour == config.MARKET_CLOSE_HOUR and now.minute >= config.MARKET_CLOSE_MINUTE):
+                    logger.info("[AUTO-STOP] Market closed at 15:30 IST. Exiting process to save GitHub minutes.")
+                    print_banner("MARKET CLOSED (15:30 IST) - ENGINE EXITING CLEANLY")
                     break
 
             try:
@@ -199,23 +200,30 @@ class StrategyRunner:
                 logger.debug(f"Chain refresh failed: {e}")
                 return
 
-        # Update live premiums for all open legs (Direct fast LTP query)
-        open_leg_query = [
-            {"symbol": leg.get("trading_symbol", f"NIFTY_{int(leg['strike'])}_{leg['option_type']}"),
-             "token": leg.get("symbol_token", ""),
-             "strike": leg["strike"],
-             "type": leg["option_type"]}
-            for leg in self.pm.open_legs
-        ]
-        if open_leg_query:
-            try:
-                live_leg_ltps = self.api.get_multiple_option_ltps(open_leg_query)
-                for leg in self.pm.open_legs:
-                    key = (leg["strike"], leg["option_type"])
-                    if key in live_leg_ltps:
-                        self.pm.update_leg_premium(leg["id"], live_leg_ltps[key])
-            except Exception as e:
-                logger.debug(f"Direct leg LTP refresh error: {e}")
+        # Update live premiums for all open legs (Sub-second tick update)
+        if self.paper_mode:
+            for leg in self.pm.open_legs:
+                iv = leg.get("iv_at_entry", 0.12)
+                bs_prem = bs_price(spot, leg["strike"], T, config.RISK_FREE_RATE, iv, leg["option_type"])
+                if bs_prem > 0:
+                    self.pm.update_leg_premium(leg["id"], round(bs_prem, 2))
+        else:
+            open_leg_query = [
+                {"symbol": leg.get("trading_symbol", f"NIFTY_{int(leg['strike'])}_{leg['option_type']}"),
+                 "token": leg.get("symbol_token", ""),
+                 "strike": leg["strike"],
+                 "type": leg["option_type"]}
+                for leg in self.pm.open_legs
+            ]
+            if open_leg_query:
+                try:
+                    live_leg_ltps = self.api.get_multiple_option_ltps(open_leg_query)
+                    for leg in self.pm.open_legs:
+                        key = (leg["strike"], leg["option_type"])
+                        if key in live_leg_ltps:
+                            self.pm.update_leg_premium(leg["id"], live_leg_ltps[key])
+                except Exception as e:
+                    logger.debug(f"Direct leg LTP refresh error: {e}")
 
         # Calculate portfolio Greeks
         portfolio = calculate_portfolio_greeks(self.pm.open_legs, spot, T)

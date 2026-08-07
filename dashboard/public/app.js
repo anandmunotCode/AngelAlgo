@@ -28,8 +28,11 @@ socket.on('update', (data) => {
   const pos = data.position;
   const trades = data.trades || [];
 
-  // Expiry
+  // Expiry & Spot
   document.getElementById('expiryDate').innerText = `Expiry: ${pos.expiry_date || '--'}`;
+  if (pos.spot_price) {
+    document.getElementById('spotPrice').innerText = Number(pos.spot_price).toFixed(2);
+  }
 
   // Calculate total P&L
   let realizedPnl = 0;
@@ -61,20 +64,15 @@ socket.on('update', (data) => {
   document.getElementById('pnlBreakdown').innerText = 
     `Realized: ₹${realizedPnl.toFixed(2)} | Unrealized: ₹${openPnl.toFixed(2)}`;
 
-  // Net Delta & Greeks
-  let netDelta = 0.0;
+  // Net Delta & Greeks (Use Python calculated portfolio net_delta if available)
+  let netDelta = pos.net_delta !== undefined ? pos.net_delta : 0.0;
   let openLegs = legs.filter(l => l.status === 'OPEN');
-
-  openLegs.forEach(l => {
-    let d = l.current_delta || l.delta_at_entry || 0;
-    if (!l.is_hedge) d = -d; // Short legs invert delta
-    netDelta += d;
-  });
+  let closedLegs = legs.filter(l => l.status === 'CLOSED');
 
   document.getElementById('netDelta').innerText = (netDelta >= 0 ? '+' : '') + netDelta.toFixed(4);
   document.getElementById('adjCount').innerText = `Adjustments: ${pos.adjustment_count || 0}`;
 
-  // Delta Gauge Fill (0.00 to 0.10 trigger line)
+  // Delta Gauge Fill (0.00 to 0.10 trigger line) - Dynamically resets to 0% after rebalance!
   const absDelta = Math.abs(netDelta);
   document.getElementById('absDeltaVal').innerText = absDelta.toFixed(4);
   const fillPct = Math.min(100, (absDelta / 0.10) * 100);
@@ -126,6 +124,36 @@ socket.on('update', (data) => {
         </tr>
       `;
     }).join('');
+  }
+
+  // Closed / Exited Legs Table
+  const closedTbody = document.getElementById('closedLegsTableBody');
+  if (closedTbody) {
+    if (closedLegs.length === 0) {
+      closedTbody.innerHTML = '<tr><td colspan="8" class="text-center muted">No exited legs yet</td></tr>';
+    } else {
+      closedTbody.innerHTML = closedLegs.map(l => {
+        const typeClass = l.is_hedge ? 'type-long' : 'type-short';
+        const optClass = l.option_type === 'CE' ? 'opt-ce' : 'opt-pe';
+        const entryP = l.entry_premium || 0;
+        const exitP = l.exit_premium || 0;
+        const pnl = l.pnl || 0;
+        const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+
+        return `
+          <tr>
+            <td class="${typeClass}">${l.is_hedge ? 'BUY (HEDGE)' : 'SELL (SHORT)'}</td>
+            <td class="${optClass}">${l.option_type}</td>
+            <td>${l.strike}</td>
+            <td>₹${entryP.toFixed(2)}</td>
+            <td>₹${exitP.toFixed(2)}</td>
+            <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}₹${pnl.toFixed(2)}</td>
+            <td>${l.exit_time || '--'}</td>
+            <td><span class="badge status-badge">EXITED</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
   }
 
   // Adjustments Timeline
