@@ -108,10 +108,10 @@ class PositionManager:
                 # P&L calculation
                 if leg["is_hedge"]:
                     # Long leg: profit = exit - entry
-                    leg["pnl"] = (exit_premium - leg["entry_premium"]) * config.LOT_SIZE
+                    leg["pnl"] = (exit_premium - leg["entry_premium"]) * config.LOT_SIZE * config.NUM_LOTS
                 else:
                     # Short leg: profit = entry - exit
-                    leg["pnl"] = (leg["entry_premium"] - exit_premium) * config.LOT_SIZE
+                    leg["pnl"] = (leg["entry_premium"] - exit_premium) * config.LOT_SIZE * config.NUM_LOTS
 
                 logger.info(
                     f"[-LEG] CLOSED {leg['leg_type']} {leg['option_type']} @ {leg['strike']} | "
@@ -310,9 +310,9 @@ class PositionManager:
         pnl = 0.0
         for leg in self.open_legs:
             if leg["is_hedge"]:
-                pnl += (leg["current_premium"] - leg["entry_premium"]) * config.LOT_SIZE
+                pnl += (leg["current_premium"] - leg["entry_premium"]) * config.LOT_SIZE * config.NUM_LOTS
             else:
-                pnl += (leg["entry_premium"] - leg["current_premium"]) * config.LOT_SIZE
+                pnl += (leg["entry_premium"] - leg["current_premium"]) * config.LOT_SIZE * config.NUM_LOTS
         return pnl
 
     @property

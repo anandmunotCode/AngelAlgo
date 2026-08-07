@@ -413,3 +413,22 @@ class AngelOneAPI:
         """Get all current positions from Angel One."""
         self.rate_limiter.wait()
         return self.smart_api.position()
+
+    def get_order_book(self):
+        """Get order book from Angel One."""
+        self.rate_limiter.wait()
+        try:
+            return self.smart_api.orderBook()
+        except Exception as e:
+            logger.error(f"Error fetching order book: {e}")
+            return None
+
+    def get_trade_book(self):
+        """Get trade book from Angel One."""
+        self.rate_limiter.wait()
+        try:
+            return self.smart_api.tradeBook()
+        except Exception as e:
+            logger.error(f"Error fetching trade book: {e}")
+            return None
+
