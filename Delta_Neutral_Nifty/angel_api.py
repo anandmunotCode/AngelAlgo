@@ -16,6 +16,32 @@ from .utils import setup_logger, now_ist, get_current_expiry
 logger = setup_logger("angel_api")
 
 
+import threading
+import random
+
+class AngelRateLimiter:
+    """
+    Thread-safe Rate Limiter matching Angel One SmartAPI official limits:
+    - Get LTP Data: Max 10 req/sec (enforced at 7 req/sec max for safety buffer)
+    - Orders: Max 10 req/sec (enforced at 5 req/sec max for safety buffer)
+    """
+    def __init__(self, max_per_second=7):
+        self.max_per_second = max_per_second
+        self.lock = threading.Lock()
+        self.timestamps = []
+
+    def wait(self):
+        with self.lock:
+            now = time.time()
+            self.timestamps = [t for t in self.timestamps if now - t < 1.0]
+            if len(self.timestamps) >= self.max_per_second:
+                sleep_time = (1.0 - (now - self.timestamps[0])) + random.uniform(0.05, 0.12)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                now = time.time()
+                self.timestamps = [t for t in self.timestamps if now - t < 1.0]
+            self.timestamps.append(time.time())
+
 class AngelOneAPI:
     """Wrapper for Angel One SmartAPI with option chain support."""
 
@@ -28,6 +54,8 @@ class AngelOneAPI:
         self.client_code = None
         self.instrument_cache = {}  # {token: instrument_info}
         self.nifty_options = {}     # {expiry_str: {strike: {CE: token, PE: token}}}
+        self.rate_limiter = AngelRateLimiter(max_per_second=7)
+        self._ltp_cache = {}        # {(symbol, token): (timestamp, ltp)}
 
     def _load_env(self):
         """Load credentials from environment variables or .env file."""
@@ -218,6 +246,7 @@ class AngelOneAPI:
 
         for attempt in range(4):
             try:
+                self.rate_limiter.wait()
                 data = self.smart_api.ltpData(
                     config.NIFTY_SPOT_EXCHANGE,
                     config.NIFTY_SYMBOL,
@@ -230,32 +259,42 @@ class AngelOneAPI:
                         return val
             except Exception as e:
                 logger.debug(f"get_spot_ltp rate limit attempt {attempt+1}: {e}")
-                time.sleep(0.5 * (attempt + 1))
+                time.sleep(0.3 * (2 ** attempt) + random.uniform(0.05, 0.15))
 
         logger.warning(f"Rate limit hit on get_spot_ltp, using cached spot: {self._last_spot}")
         return self._last_spot
 
     def get_option_ltp(self, symbol, token):
-        """Get LTP for a specific option contract with rate-limit protection."""
-        for attempt in range(3):
+        """Get LTP for a specific option contract with rate-limit protection and 500ms cache."""
+        cache_key = (symbol, token)
+        now = time.time()
+        if cache_key in self._ltp_cache:
+            ts, val = self._ltp_cache[cache_key]
+            if now - ts < 0.5:  # 500ms cache
+                return val
+
+        for attempt in range(4):
             try:
+                self.rate_limiter.wait()
                 data = self.smart_api.ltpData(
                     config.NIFTY_OPTIONS_EXCHANGE,
                     symbol,
                     token
                 )
-                if data and data.get("data") and "ltp" in data["data"]:
-                    return float(data["data"]["ltp"])
+                if data and isinstance(data, dict) and data.get("data") and "ltp" in data["data"]:
+                    val = float(data["data"]["ltp"])
+                    self._ltp_cache[cache_key] = (now, val)
+                    return val
             except Exception as e:
-                if "exceeding access rate" in str(e).lower():
-                    time.sleep(0.3 * (attempt + 1))
+                if "exceeding access rate" in str(e).lower() or "429" in str(e):
+                    time.sleep(0.3 * (2 ** attempt) + random.uniform(0.05, 0.15))
                 else:
                     break
         return None
 
     def get_multiple_option_ltps(self, option_list):
         """
-        Get LTPs for multiple option contracts concurrently.
+        Get LTPs for multiple option contracts concurrently with strict rate limits.
         option_list: list of {"symbol": str, "token": str, "strike": float, "type": str}
         Returns: {(strike, type): ltp}
         """
@@ -271,7 +310,8 @@ class AngelOneAPI:
                 pass
             return None, None
 
-        with ThreadPoolExecutor(max_workers=12) as executor:
+        # max_workers=4 keeps total concurrency strictly within Angel One's 10 req/s limit
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(_fetch, opt) for opt in option_list]
             for future in as_completed(futures):
                 key, ltp = future.result()
@@ -350,6 +390,7 @@ class AngelOneAPI:
         order_type: "MARKET" or "LIMIT"
         product_type: "CARRYFORWARD" (NRML) or "INTRADAY"
         """
+        self.rate_limiter.wait()
         order_params = {
             "variety": "NORMAL",
             "tradingsymbol": symbol,
@@ -370,4 +411,5 @@ class AngelOneAPI:
 
     def get_positions(self):
         """Get all current positions from Angel One."""
+        self.rate_limiter.wait()
         return self.smart_api.position()
