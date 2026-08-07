@@ -41,12 +41,12 @@ class StrategyRunner:
         mode_str = "PAPER TRADING" if self.paper_mode else "⚡ LIVE TRADING ⚡"
         print_banner(f"DELTA NEUTRAL NIFTY - {mode_str}")
         print(f"  Lot Size: {config.LOT_SIZE} x {config.NUM_LOTS} lot(s)")
-        print(f"  Entry Delta: ±{config.ENTRY_DELTA} | Hedge Delta: ±{config.HEDGE_DELTA}")
+        print(f"  Entry Delta: +/-{config.ENTRY_DELTA} | Hedge Delta: +/-{config.HEDGE_DELTA}")
         print(f"  Monitoring: Every {config.OPTION_CHAIN_REFRESH_SECONDS}s")
-        print(f"  Adjustment Triggers: Δ>{config.PORTFOLIO_DELTA_BREACH}, "
+        print(f"  Adjustment Triggers: NetDelta>{config.PORTFOLIO_DELTA_BREACH}, "
               f"PremCapture>{config.PREMIUM_CAPTURE_PCT*100:.0f}%, "
-              f"LosΔ>{config.LOSING_LEG_DELTA_THRESHOLD}, "
-              f"γ>{config.GAMMA_DANGER_THRESHOLD}")
+              f"LosingDelta>{config.LOSING_LEG_DELTA_THRESHOLD}, "
+              f"Gamma>{config.GAMMA_DANGER_THRESHOLD}")
 
         # Login
         self.api.login()
