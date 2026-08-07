@@ -196,25 +196,42 @@ class AngelOneAPI:
     # ─── MARKET DATA ──────────────────────────────────────────────
 
     def get_spot_ltp(self):
-        """Get current Nifty spot LTP."""
-        data = self.smart_api.ltpData(
-            config.NIFTY_SPOT_EXCHANGE,
-            config.NIFTY_SYMBOL,
-            config.NIFTY_SPOT_TOKEN
-        )
-        if data and data.get("data"):
-            return float(data["data"]["ltp"])
-        raise RuntimeError(f"Failed to fetch Nifty spot LTP: {data}")
+        """Get current Nifty spot LTP with rate-limit protection."""
+        for attempt in range(3):
+            try:
+                data = self.smart_api.ltpData(
+                    config.NIFTY_SPOT_EXCHANGE,
+                    config.NIFTY_SYMBOL,
+                    config.NIFTY_SPOT_TOKEN
+                )
+                if data and data.get("data") and "ltp" in data["data"]:
+                    return float(data["data"]["ltp"])
+            except Exception as e:
+                if "exceeding access rate" in str(e).lower():
+                    time.sleep(0.4 * (attempt + 1))
+                else:
+                    logger.debug(f"get_spot_ltp error: {e}")
+        # Return fallback from current positions if available
+        if hasattr(self, "_last_spot") and self._last_spot:
+            return self._last_spot
+        raise RuntimeError("Failed to fetch Nifty spot LTP due to rate limits")
 
     def get_option_ltp(self, symbol, token):
-        """Get LTP for a specific option contract."""
-        data = self.smart_api.ltpData(
-            config.NIFTY_OPTIONS_EXCHANGE,
-            symbol,
-            token
-        )
-        if data and data.get("data"):
-            return float(data["data"]["ltp"])
+        """Get LTP for a specific option contract with rate-limit protection."""
+        for attempt in range(3):
+            try:
+                data = self.smart_api.ltpData(
+                    config.NIFTY_OPTIONS_EXCHANGE,
+                    symbol,
+                    token
+                )
+                if data and data.get("data") and "ltp" in data["data"]:
+                    return float(data["data"]["ltp"])
+            except Exception as e:
+                if "exceeding access rate" in str(e).lower():
+                    time.sleep(0.3 * (attempt + 1))
+                else:
+                    break
         return None
 
     def get_multiple_option_ltps(self, option_list):
