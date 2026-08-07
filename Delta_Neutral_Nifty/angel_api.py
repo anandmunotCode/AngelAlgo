@@ -172,6 +172,24 @@ class AngelOneAPI:
             if expiry_date.strftime("%Y-%m-%d") in key or expiry_str in key:
                 return self.nifty_options[key]
 
+        # Fallback: return nearest valid option chain from master
+        from datetime import datetime, date
+        today_date = expiry_date if isinstance(expiry_date, date) else date.today()
+        upcoming = []
+        for exp_k, chain_data in self.nifty_options.items():
+            try:
+                dt_exp = datetime.strptime(exp_k, "%d%b%Y").date()
+                if dt_exp >= today_date:
+                    upcoming.append((dt_exp, chain_data))
+            except Exception:
+                pass
+        if upcoming:
+            upcoming.sort(key=lambda x: x[0])
+            return upcoming[0][1]
+
+        logger.warning(f"No option chain found for target expiry {expiry_str}")
+        return {}
+
     def get_nearest_expiry_date(self, from_date=None):
         """Get exact nearest future expiry date object from Angel One master."""
         if not self.nifty_options:
