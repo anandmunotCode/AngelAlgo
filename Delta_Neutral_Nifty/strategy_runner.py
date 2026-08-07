@@ -95,10 +95,9 @@ class StrategyRunner:
                     spot += random.uniform(-0.30, 0.30)
                 T = time_to_expiry_years(self.expiry_date, now)
 
-                # Phase 1: Initial entry if no active position
-                if self.pm.is_active and not self.pm.open_short_legs:
-                    if is_entry_window(now):
-                        self._execute_initial_entry(spot, T)
+                # Phase 1: Initial entry if no open short legs
+                if not self.pm.open_short_legs:
+                    self._execute_initial_entry(spot, T)
 
                 # Phase 2: Monitor and adjust
                 if self.pm.open_short_legs:

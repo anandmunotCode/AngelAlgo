@@ -1,6 +1,9 @@
 name: Delta Neutral Nifty - Paper Trading
 
 on:
+  schedule:
+    # Runs Monday to Thursday at 09:18 AM IST (03:48 AM UTC)
+    - cron: '48 3 * * 1-4'
   workflow_dispatch:
 
 jobs:
