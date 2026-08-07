@@ -208,6 +208,14 @@ def find_strike_at_delta(strikes_with_premiums, spot, target_delta,
 
     for strike in candidate_strikes:
         strike_f = float(strike)
+
+        # For OTM targets (delta <= 0.45), filter out deep ITM strikes to avoid bad quote anomalies
+        if target_delta <= 0.45:
+            if option_type == "CE" and strike_f < (spot - 150):
+                continue
+            elif option_type == "PE" and strike_f > (spot + 150):
+                continue
+
         prem = None
         if strikes_with_premiums:
             prem = strikes_with_premiums.get(strike_f)

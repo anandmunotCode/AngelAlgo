@@ -215,6 +215,7 @@ class PositionManager:
                 f"Gap={proximity} pts → NO FURTHER ADJUSTMENTS"
             )
             self.save()
+            return True
         return False
 
     def check_straddle_stop_loss(self, spot):

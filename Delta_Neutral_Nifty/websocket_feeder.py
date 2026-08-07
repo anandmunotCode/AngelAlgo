@@ -356,23 +356,29 @@ class WebSocketFeeder:
         if not message or not isinstance(message, dict):
             return
 
-        token = str(message.get("token", ""))
+        raw_token = message.get("token", "")
+        if isinstance(raw_token, bytes):
+            token = raw_token.decode("utf-8", errors="ignore").rstrip("\x00").strip()
+        else:
+            token = str(raw_token).rstrip("\x00").strip()
+
         ltp_raw = message.get("last_traded_price", 0)
+        if not ltp_raw or ltp_raw <= 0:
+            return
 
-        # Angel One WebSocket sends price * 100 for NFO
-        # Check exchange_type to determine divisor
-        exchange_type = message.get("exchange_type", 0)
+        # Angel One SmartWebSocketV2 sends last_traded_price in paise (integer x100)
+        exchange_type = message.get("exchange_type", message.get("exchangeType", 0))
 
-        if exchange_type == 1:
-            # NSE Cash (Nifty Spot) — price / 100
-            spot = ltp_raw / 100.0 if ltp_raw > 100000 else float(ltp_raw)
+        if exchange_type == 1 or token == str(config.NIFTY_SPOT_TOKEN):
+            # NSE Cash (Nifty Spot) — price in paise if > 50,000
+            spot = float(ltp_raw) / 100.0 if ltp_raw > 50000 else float(ltp_raw)
             with self._lock:
                 if spot > 0:
                     self._spot_price = spot
             return
 
-        # NFO option tick
-        ltp = ltp_raw / 100.0 if ltp_raw > 10000 else float(ltp_raw)
+        # NFO option tick — price in paise (divided by 100)
+        ltp = float(ltp_raw) / 100.0 if ltp_raw > 500 else float(ltp_raw)
 
         if ltp <= 0:
             return
