@@ -167,13 +167,30 @@ class AngelOneAPI:
         if expiry_str in self.nifty_options:
             return self.nifty_options[expiry_str]
 
-        # Try alternate formats
+        # Try alternate matching
         for key in self.nifty_options:
             if expiry_date.strftime("%Y-%m-%d") in key or expiry_str in key:
                 return self.nifty_options[key]
 
-        logger.warning(f"No option chain found for expiry {expiry_str}")
-        logger.debug(f"Available expiries: {list(self.nifty_options.keys())[:10]}")
+        # Fallback: Find nearest future expiry in master
+        from datetime import datetime
+        today_date = expiry_date if isinstance(expiry_date, date) else date.today()
+        upcoming = []
+        for exp_k in self.nifty_options.keys():
+            try:
+                dt_exp = datetime.strptime(exp_k, "%d%b%Y").date()
+                if dt_exp >= today_date:
+                    upcoming.append((dt_exp, exp_k))
+            except Exception:
+                pass
+
+        if upcoming:
+            upcoming.sort(key=lambda x: x[0])
+            nearest_exp_str = upcoming[0][1]
+            logger.info(f"Using nearest valid weekly expiry from master: {nearest_exp_str}")
+            return self.nifty_options[nearest_exp_str]
+
+        logger.warning(f"No option chain found for target expiry {expiry_str}")
         return {}
 
     # ─── MARKET DATA ──────────────────────────────────────────────
