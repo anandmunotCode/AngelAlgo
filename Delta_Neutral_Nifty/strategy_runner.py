@@ -90,6 +90,9 @@ class StrategyRunner:
 
             try:
                 spot = self.api.get_spot_ltp()
+                if self.paper_mode:
+                    import random
+                    spot += random.uniform(-0.30, 0.30)
                 T = time_to_expiry_years(self.expiry_date, now)
 
                 # Phase 1: Initial entry if no active position
