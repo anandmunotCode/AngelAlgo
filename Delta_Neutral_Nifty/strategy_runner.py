@@ -244,14 +244,17 @@ class StrategyRunner:
         status_line = (
             f"[{now_ist().strftime('%H:%M:%S')}] "
             f"Spot={spot:>9.2f} | "
-            f"Δ={net_d:>+7.4f} | "
-            f"γ={net_g:>+8.5f} | "
-            f"θ={net_t:>+7.2f} | "
+            f"Delta={net_d:>+7.4f} | "
+            f"Gamma={net_g:>+8.5f} | "
+            f"Theta={net_t:>+7.2f} | "
             f"P&L={format_pnl(pnl):>12} | "
             f"Adj={adj_count} | "
             f"Straddle={straddle}"
         )
-        print(status_line)
+        try:
+            print(status_line)
+        except UnicodeEncodeError:
+            print(status_line.encode('ascii', 'ignore').decode('ascii'))
 
 
 def main():
