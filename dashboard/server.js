@@ -15,41 +15,58 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const POSITION_FILE = path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'position.json');
-const TRADE_LOG_FILE = path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'trade_log.csv');
+const POSITION_FILE_PATHS = [
+  path.join(__dirname, '..', 'positions.json'),
+  path.join(__dirname, '..', 'position.json'),
+  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'position.json'),
+  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'positions.json')
+];
+
+const TRADE_LOG_PATHS = [
+  path.join(__dirname, '..', 'trade_log.csv'),
+  path.join(__dirname, '..', 'paper_trades_log.csv'),
+  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'trade_log.csv')
+];
 
 function readPositionData() {
-  try {
-    if (fs.existsSync(POSITION_FILE)) {
-      const raw = fs.readFileSync(POSITION_FILE, 'utf-8');
-      return JSON.parse(raw);
+  for (const filePath of POSITION_FILE_PATHS) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        if (raw && raw.trim()) {
+          return JSON.parse(raw);
+        }
+      }
+    } catch (err) {
+      console.error(`Error reading position file ${filePath}:`, err.message);
     }
-  } catch (err) {
-    console.error('Error reading position file:', err.message);
   }
   return null;
 }
 
 function readTradeLogs() {
-  try {
-    if (fs.existsSync(TRADE_LOG_FILE)) {
-      const raw = fs.readFileSync(TRADE_LOG_FILE, 'utf-8');
-      const lines = raw.trim().split('\n');
-      if (lines.length <= 1) return [];
-      const headers = lines[0].split(',').map(h => h.trim());
-      const trades = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
-        const entry = {};
-        headers.forEach((h, idx) => {
-          entry[h] = values[idx] || '';
-        });
-        trades.push(entry);
+  for (const filePath of TRADE_LOG_PATHS) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const lines = raw.trim().split('\n');
+        if (lines.length <= 1) continue;
+        const headers = lines[0].split(',').map(h => h.trim());
+        const trades = [];
+        for (let i = 1; i < lines.length; i++) {
+          if (!lines[i].trim()) continue;
+          const values = lines[i].split(',').map(v => v.trim());
+          const entry = {};
+          headers.forEach((h, idx) => {
+            entry[h] = values[idx] || '';
+          });
+          trades.push(entry);
+        }
+        if (trades.length > 0) return trades.reverse();
       }
-      return trades.reverse(); // Most recent first
+    } catch (err) {
+      console.error(`Error reading trade log ${filePath}:`, err.message);
     }
-  } catch (err) {
-    console.error('Error reading trade log:', err.message);
   }
   return [];
 }
