@@ -153,12 +153,12 @@ def implied_volatility(market_price, S, K, T, r, option_type="CE",
 def find_strike_at_delta(strikes_with_premiums, spot, target_delta,
                          option_type, T, r=None):
     """
-    Find the strike whose |delta| is closest to target_delta.
+    Find the strike whose |delta| is mathematically closest to target_delta (e.g. 0.15).
 
     Args:
         strikes_with_premiums: dict {strike_price: market_premium}
         spot: current Nifty spot price
-        target_delta: absolute delta target (e.g., 0.15)
+        target_delta: absolute delta target (e.g., 0.15 for short, 0.05 for hedge)
         option_type: "CE" or "PE"
         T: time to expiry in years
         r: risk-free rate (uses config default if None)
@@ -169,46 +169,74 @@ def find_strike_at_delta(strikes_with_premiums, spot, target_delta,
     if r is None:
         r = config.RISK_FREE_RATE
 
+    if T <= 0:
+        T = 0.0001
+
+    # 1. Estimate ATM IV from available near-ATM premiums
+    atm_strike = round(spot / 50.0) * 50.0
+    atm_ivs = []
+    if strikes_with_premiums:
+        for strk, prem in strikes_with_premiums.items():
+            if abs(float(strk) - atm_strike) <= 400 and prem > 1.0:
+                iv_est = implied_volatility(prem, spot, float(strk), T, r, option_type)
+                if 0.05 <= iv_est <= 0.80:
+                    atm_ivs.append(iv_est)
+
+    avg_iv = sum(atm_ivs) / len(atm_ivs) if atm_ivs else 0.12
+
+    # 2. Build full strike range (Nifty 50-point step)
+    min_strike = max(50.0, round((spot - 2500.0) / 50.0) * 50.0)
+    max_strike = round((spot + 2500.0) / 50.0) * 50.0
+
+    all_candidate_strikes = set()
+    if strikes_with_premiums:
+        for s in strikes_with_premiums.keys():
+            all_candidate_strikes.add(float(s))
+
+    s_curr = min_strike
+    while s_curr <= max_strike:
+        all_candidate_strikes.add(float(s_curr))
+        s_curr += 50.0
+
+    candidate_strikes = sorted(list(all_candidate_strikes))
+
     best_strike = None
     best_diff = float("inf")
     best_delta = None
     best_iv = None
     best_premium = None
 
-    for strike, premium in strikes_with_premiums.items():
-        if premium <= 0.10:  # Skip near-zero / illiquid in primary pass
-            continue
+    for strike in candidate_strikes:
+        strike_f = float(strike)
+        prem = None
+        if strikes_with_premiums:
+            prem = strikes_with_premiums.get(strike_f)
+            if prem is None:
+                prem = strikes_with_premiums.get(int(strike_f))
 
-        iv = implied_volatility(premium, spot, float(strike), T, r, option_type)
-        if iv <= 0.005:
-            continue
+        iv = None
+        if prem is not None and prem > 0.10:
+            calc_iv = implied_volatility(prem, spot, strike_f, T, r, option_type)
+            if 0.01 <= calc_iv <= 1.5:
+                iv = calc_iv
 
-        d = abs(delta(spot, float(strike), T, r, iv, option_type))
+        if iv is None:
+            iv = avg_iv
+            if prem is None or prem <= 0:
+                prem = bs_price(spot, strike_f, T, r, iv, option_type)
+
+        d = abs(delta(spot, strike_f, T, r, iv, option_type))
         diff = abs(d - target_delta)
 
         if diff < best_diff:
             best_diff = diff
-            best_strike = float(strike)
+            best_strike = strike_f
             best_delta = d
             best_iv = iv
-            best_premium = premium
-
-    # FALLBACK PASS: If no liquid strike was found, pick the ABSOLUTE NEAREST strike from all available
-    if best_strike is None and strikes_with_premiums:
-        for strike, premium in strikes_with_premiums.items():
-            if premium <= 0:
-                continue
-            iv = max(0.15, implied_volatility(premium, spot, float(strike), T, r, option_type))
-            d = abs(delta(spot, float(strike), T, r, iv, option_type))
-            diff = abs(d - target_delta)
-            if diff < best_diff:
-                best_diff = diff
-                best_strike = float(strike)
-                best_delta = d
-                best_iv = iv
-                best_premium = premium
+            best_premium = prem
 
     return best_strike, best_delta, best_iv, best_premium
+
 
 
 def calculate_portfolio_greeks(legs, spot, T, r=None):
