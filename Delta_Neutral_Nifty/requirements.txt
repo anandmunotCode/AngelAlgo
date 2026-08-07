@@ -2,5 +2,7 @@ pandas>=2.0
 numpy>=1.24
 scipy>=1.10
 smartapi-python
+logzero
+websocket-client
 pyotp>=2.8
 requests>=2.28
