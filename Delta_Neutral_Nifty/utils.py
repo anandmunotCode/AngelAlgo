@@ -182,11 +182,17 @@ def format_pnl(value):
     return f"{sign}₹{value:,.2f}"
 
 
-def print_banner(text, char="═", width=70):
-    """Print formatted banner."""
-    print(f"\n{char * width}")
-    print(f"  {text}")
-    print(f"{char * width}")
+def print_banner(text, char="=", width=70):
+    """Print formatted banner safely across all OS console encodings."""
+    try:
+        print(f"\n{char * width}")
+        print(f"  {text}")
+        print(f"{char * width}")
+    except UnicodeEncodeError:
+        safe_text = text.encode("ascii", "ignore").decode("ascii")
+        print(f"\n{'=' * width}")
+        print(f"  {safe_text}")
+        print(f"{'=' * width}")
 
 
 def print_position_table(legs):
