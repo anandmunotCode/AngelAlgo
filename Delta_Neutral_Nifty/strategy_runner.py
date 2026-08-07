@@ -52,8 +52,8 @@ class StrategyRunner:
         self.api.login()
         self.api.fetch_instrument_master()
 
-        # Determine expiry
-        self.expiry_date = get_current_expiry()
+        # Determine expiry dynamically from Angel One master
+        self.expiry_date = self.api.get_nearest_expiry_date()
         self.adj_engine = AdjustmentEngine(self.pm, self.api, self.expiry_date)
 
         logger.info(f"Current weekly expiry: {self.expiry_date}")

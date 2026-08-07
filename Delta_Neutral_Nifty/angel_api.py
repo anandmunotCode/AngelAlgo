@@ -172,26 +172,24 @@ class AngelOneAPI:
             if expiry_date.strftime("%Y-%m-%d") in key or expiry_str in key:
                 return self.nifty_options[key]
 
-        # Fallback: Find nearest future expiry in master
+    def get_nearest_expiry_date(self, from_date=None):
+        """Get exact nearest future expiry date object from Angel One master."""
+        if not self.nifty_options:
+            self.fetch_instrument_master()
         from datetime import datetime, date
-        today_date = expiry_date if isinstance(expiry_date, date) else date.today()
+        today_date = from_date if isinstance(from_date, date) else date.today()
         upcoming = []
         for exp_k in self.nifty_options.keys():
             try:
                 dt_exp = datetime.strptime(exp_k, "%d%b%Y").date()
                 if dt_exp >= today_date:
-                    upcoming.append((dt_exp, exp_k))
+                    upcoming.append(dt_exp)
             except Exception:
                 pass
-
         if upcoming:
-            upcoming.sort(key=lambda x: x[0])
-            nearest_exp_str = upcoming[0][1]
-            logger.info(f"Using nearest valid weekly expiry from master: {nearest_exp_str}")
-            return self.nifty_options[nearest_exp_str]
-
-        logger.warning(f"No option chain found for target expiry {expiry_str}")
-        return {}
+            upcoming.sort()
+            return upcoming[0]
+        return today_date
 
     # ─── MARKET DATA ──────────────────────────────────────────────
 
@@ -260,10 +258,10 @@ class AngelOneAPI:
                     results[key] = ltp
         return results
 
-    def get_option_chain_ltps(self, expiry_date, spot_price, range_pct=0.03):
+    def get_option_chain_ltps(self, expiry_date, spot_price, range_pct=0.08):
         """
         Get LTPs for all relevant strikes around current spot price.
-        range_pct: how far from ATM to scan (8% = ±2000 pts at 25000)
+        range_pct: how far from ATM to scan (8% = ±2000 pts / 40+ strikes)
         Returns: {"CE": {strike: ltp}, "PE": {strike: ltp}}
         """
         chain = self.get_option_chain_for_expiry(expiry_date)
