@@ -49,8 +49,8 @@ STRADDLE_SPOT_SL_PCT = 0.0125         # Exit if Nifty moves >= 1.25% from Stradd
 # - Option chain LTP refresh: every 5 seconds via REST
 # - Greeks recalculation: on every LTP refresh
 # - Adjustment decision: on every Greeks refresh
-OPTION_CHAIN_REFRESH_SECONDS = 1   # Refresh option chain every 1s for ultra-fast simulation
-ADJUSTMENT_CHECK_SECONDS = 0.3     # Check triggers every 0.3s (300ms live sub-second refresh)
+OPTION_CHAIN_REFRESH_SECONDS = 2   # Refresh option chain every 2s to strictly comply with Angel REST limits
+ADJUSTMENT_CHECK_SECONDS = 1.0     # Check triggers & spot every 1.0s (strictly 1 req/sec max)
 WEBSOCKET_RECONNECT_SECONDS = 3    # Auto-reconnect WebSocket if dropped
 FALLBACK_POLL_SECONDS = 3          # REST polling if WebSocket fails
 

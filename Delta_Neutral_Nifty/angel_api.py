@@ -244,6 +244,14 @@ class AngelOneAPI:
         if not hasattr(self, "_last_spot"):
             self._last_spot = 24550.0
 
+        now = time.time()
+        # Enforce minimum 0.8s between REST API calls for spot LTP to comply with 1 req/s rate limit
+        if hasattr(self, "_last_spot_fetch_time") and (now - self._last_spot_fetch_time < 0.8) and self._last_spot > 0:
+            return self._last_spot
+
+        if not self.smart_api:
+            return self._last_spot
+
         for attempt in range(4):
             try:
                 self.rate_limiter.wait()
@@ -252,26 +260,37 @@ class AngelOneAPI:
                     config.NIFTY_SYMBOL,
                     config.NIFTY_SPOT_TOKEN
                 )
-                if data and isinstance(data, dict) and data.get("data") and "ltp" in data["data"]:
-                    val = float(data["data"]["ltp"])
-                    if val > 0:
-                        self._last_spot = val
-                        return val
+                if data and isinstance(data, dict):
+                    if data.get("status") and data.get("data") and "ltp" in data["data"]:
+                        val = float(data["data"]["ltp"])
+                        if val > 0:
+                            self._last_spot = val
+                            self._last_spot_fetch_time = time.time()
+                            return val
+                    else:
+                        msg = data.get("message", "")
+                        if "exceeding access rate" in str(msg).lower() or "ab1004" in str(data.get("errorcode", "")).lower():
+                            time.sleep(1.0 + random.uniform(0.1, 0.3))
+                        else:
+                            break
             except Exception as e:
-                logger.debug(f"get_spot_ltp rate limit attempt {attempt+1}: {e}")
-                time.sleep(0.3 * (2 ** attempt) + random.uniform(0.05, 0.15))
+                logger.debug(f"get_spot_ltp exception attempt {attempt+1}: {e}")
+                time.sleep(0.5 * (2 ** attempt) + random.uniform(0.05, 0.15))
 
-        logger.warning(f"Rate limit hit on get_spot_ltp, using cached spot: {self._last_spot}")
+        self._last_spot_fetch_time = time.time()
         return self._last_spot
 
     def get_option_ltp(self, symbol, token):
-        """Get LTP for a specific option contract with rate-limit protection and 500ms cache."""
+        """Get LTP for a specific option contract with rate-limit protection and 800ms cache."""
         cache_key = (symbol, token)
         now = time.time()
         if cache_key in self._ltp_cache:
             ts, val = self._ltp_cache[cache_key]
-            if now - ts < 0.5:  # 500ms cache
+            if now - ts < 0.8:  # 800ms cache
                 return val
+
+        if not self.smart_api:
+            return None
 
         for attempt in range(4):
             try:
@@ -281,15 +300,20 @@ class AngelOneAPI:
                     symbol,
                     token
                 )
-                if data and isinstance(data, dict) and data.get("data") and "ltp" in data["data"]:
-                    val = float(data["data"]["ltp"])
-                    self._ltp_cache[cache_key] = (now, val)
-                    return val
+                if data and isinstance(data, dict):
+                    if data.get("status") and data.get("data") and "ltp" in data["data"]:
+                        val = float(data["data"]["ltp"])
+                        self._ltp_cache[cache_key] = (now, val)
+                        return val
+                    else:
+                        msg = data.get("message", "")
+                        if "exceeding access rate" in str(msg).lower() or "ab1004" in str(data.get("errorcode", "")).lower():
+                            time.sleep(0.8 + random.uniform(0.05, 0.15))
+                        else:
+                            break
             except Exception as e:
-                if "exceeding access rate" in str(e).lower() or "429" in str(e):
-                    time.sleep(0.3 * (2 ** attempt) + random.uniform(0.05, 0.15))
-                else:
-                    break
+                time.sleep(0.4 * (2 ** attempt))
+
         return None
 
     def get_multiple_option_ltps(self, option_list):
