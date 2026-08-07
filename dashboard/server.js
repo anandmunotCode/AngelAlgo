@@ -96,7 +96,7 @@ setInterval(() => {
   const pos = readPositionData();
   const trades = readTradeLogs();
   io.emit('update', { position: pos, trades: trades, timestamp: new Date().toISOString() });
-}, 1000);
+}, 300);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

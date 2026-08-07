@@ -197,12 +197,23 @@ class StrategyRunner:
                 logger.debug(f"Chain refresh failed: {e}")
                 return
 
-        # Update live premiums for all open legs
-        for leg in self.pm.open_legs:
-            key = (leg["strike"], leg["option_type"])
-            side_ltps = self.cached_chain_ltps.get(leg["option_type"], {})
-            if leg["strike"] in side_ltps:
-                self.pm.update_leg_premium(leg["id"], side_ltps[leg["strike"]])
+        # Update live premiums for all open legs (Direct fast LTP query)
+        open_leg_query = [
+            {"symbol": leg.get("trading_symbol", f"NIFTY_{int(leg['strike'])}_{leg['option_type']}"),
+             "token": leg.get("symbol_token", ""),
+             "strike": leg["strike"],
+             "type": leg["option_type"]}
+            for leg in self.pm.open_legs
+        ]
+        if open_leg_query:
+            try:
+                live_leg_ltps = self.api.get_multiple_option_ltps(open_leg_query)
+                for leg in self.pm.open_legs:
+                    key = (leg["strike"], leg["option_type"])
+                    if key in live_leg_ltps:
+                        self.pm.update_leg_premium(leg["id"], live_leg_ltps[key])
+            except Exception as e:
+                logger.debug(f"Direct leg LTP refresh error: {e}")
 
         # Calculate portfolio Greeks
         portfolio = calculate_portfolio_greeks(self.pm.open_legs, spot, T)
