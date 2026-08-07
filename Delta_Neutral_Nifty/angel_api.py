@@ -173,7 +173,7 @@ class AngelOneAPI:
                 return self.nifty_options[key]
 
         # Fallback: Find nearest future expiry in master
-        from datetime import datetime
+        from datetime import datetime, date
         today_date = expiry_date if isinstance(expiry_date, date) else date.today()
         upcoming = []
         for exp_k in self.nifty_options.keys():
