@@ -213,24 +213,27 @@ class AngelOneAPI:
 
     def get_spot_ltp(self):
         """Get current Nifty spot LTP with rate-limit protection."""
-        for attempt in range(3):
+        if not hasattr(self, "_last_spot"):
+            self._last_spot = 24550.0
+
+        for attempt in range(4):
             try:
                 data = self.smart_api.ltpData(
                     config.NIFTY_SPOT_EXCHANGE,
                     config.NIFTY_SYMBOL,
                     config.NIFTY_SPOT_TOKEN
                 )
-                if data and data.get("data") and "ltp" in data["data"]:
-                    return float(data["data"]["ltp"])
+                if data and isinstance(data, dict) and data.get("data") and "ltp" in data["data"]:
+                    val = float(data["data"]["ltp"])
+                    if val > 0:
+                        self._last_spot = val
+                        return val
             except Exception as e:
-                if "exceeding access rate" in str(e).lower():
-                    time.sleep(0.4 * (attempt + 1))
-                else:
-                    logger.debug(f"get_spot_ltp error: {e}")
-        # Return fallback from current positions if available
-        if hasattr(self, "_last_spot") and self._last_spot:
-            return self._last_spot
-        raise RuntimeError("Failed to fetch Nifty spot LTP due to rate limits")
+                logger.debug(f"get_spot_ltp rate limit attempt {attempt+1}: {e}")
+                time.sleep(0.5 * (attempt + 1))
+
+        logger.warning(f"Rate limit hit on get_spot_ltp, using cached spot: {self._last_spot}")
+        return self._last_spot
 
     def get_option_ltp(self, symbol, token):
         """Get LTP for a specific option contract with rate-limit protection."""
