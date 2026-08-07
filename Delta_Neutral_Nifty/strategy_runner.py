@@ -82,12 +82,11 @@ class StrategyRunner:
             self.ws_feeder.stop()
 
     def _start_websocket_feeder(self):
-        """Initialize WebSocket V2 and subscribe to ALL option strikes."""
-        if self.paper_mode:
-            # Paper mode: no WebSocket needed, use BS theoretical prices
-            logger.info("[MODE] Paper trading - using Black-Scholes simulated prices")
-            self.use_websocket = False
-            return
+        """
+        Initialize WebSocket V2 and subscribe to ALL option strikes.
+        Used in BOTH paper and live modes — real market data is essential for accurate testing.
+        Only difference: paper mode does not place real orders.
+        """
 
         try:
             spot = self.api.get_spot_ltp()
@@ -155,17 +154,13 @@ class StrategyRunner:
                     break
 
             try:
-                # Get spot price
+                # Get spot price (real data in both paper and live modes)
                 if self.use_websocket and self.ws_feeder and self.ws_feeder.is_connected():
                     spot = self.ws_feeder.get_spot()
                     if spot <= 0:
                         spot = self.api.get_spot_ltp()
                 else:
                     spot = self.api.get_spot_ltp()
-
-                if self.paper_mode:
-                    import random
-                    spot += random.uniform(-0.30, 0.30)
 
                 T = time_to_expiry_years(self.expiry_date, now)
 
@@ -295,14 +290,8 @@ class StrategyRunner:
                     logger.debug(f"Chain refresh failed: {e}")
                     return
 
-        # Update live premiums for all open legs
-        if self.paper_mode:
-            for leg in self.pm.open_legs:
-                iv = leg.get("iv_at_entry", 0.12)
-                bs_prem = bs_price(spot, leg["strike"], T, config.RISK_FREE_RATE, iv, leg["option_type"])
-                if bs_prem > 0:
-                    self.pm.update_leg_premium(leg["id"], round(bs_prem, 2))
-        elif self.use_websocket and self.ws_feeder and self.ws_feeder.is_connected():
+        # Update live premiums for all open legs (same real data in paper & live)
+        if self.use_websocket and self.ws_feeder and self.ws_feeder.is_connected():
             # WebSocket: Get live LTP for each open leg from streaming data
             for leg in self.pm.open_legs:
                 strike = leg["strike"]
