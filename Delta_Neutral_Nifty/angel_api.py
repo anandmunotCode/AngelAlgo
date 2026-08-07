@@ -219,22 +219,31 @@ class AngelOneAPI:
 
     def get_multiple_option_ltps(self, option_list):
         """
-        Get LTPs for multiple option contracts efficiently.
+        Get LTPs for multiple option contracts concurrently.
         option_list: list of {"symbol": str, "token": str, "strike": float, "type": str}
         Returns: {(strike, type): ltp}
         """
         results = {}
-        for opt in option_list:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _fetch(opt):
             try:
                 ltp = self.get_option_ltp(opt["symbol"], opt["token"])
                 if ltp is not None:
-                    results[(opt["strike"], opt["type"])] = ltp
-            except Exception as e:
-                logger.debug(f"LTP fetch failed for {opt['symbol']}: {e}")
-            time.sleep(0.1)  # Rate limit courtesy
+                    return (opt["strike"], opt["type"]), ltp
+            except Exception:
+                pass
+            return None, None
+
+        with ThreadPoolExecutor(max_workers=12) as executor:
+            futures = [executor.submit(_fetch, opt) for opt in option_list]
+            for future in as_completed(futures):
+                key, ltp = future.result()
+                if key and ltp is not None:
+                    results[key] = ltp
         return results
 
-    def get_option_chain_ltps(self, expiry_date, spot_price, range_pct=0.08):
+    def get_option_chain_ltps(self, expiry_date, spot_price, range_pct=0.03):
         """
         Get LTPs for all relevant strikes around current spot price.
         range_pct: how far from ATM to scan (8% = ±2000 pts at 25000)
