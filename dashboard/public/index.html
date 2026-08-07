@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delta Neutral Nifty - Institutional Trading Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="dashboard-wrapper">
+    <!-- Top Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div class="brand-text">
+          <h1>DELTA NEUTRAL <span>NIFTY</span></h1>
+          <p class="subtitle">Institutional Volatility & Adjustment Terminal</p>
+        </div>
+      </div>
+      <div class="status-bar">
+        <div class="badge mode-badge" id="modeBadge">PAPER TRADING</div>
+        <div class="badge status-badge" id="statusBadge">CONNECTING...</div>
+        <div class="clock" id="liveClock">00:00:00 IST</div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="grid-container">
+      
+      <!-- Live Metrics Hero Grid -->
+      <section class="hero-grid">
+        <div class="card pnl-card">
+          <div class="card-label">TOTAL P&amp;L</div>
+          <div class="card-value pnl-value" id="totalPnl">₹0.00</div>
+          <div class="card-sub" id="pnlBreakdown">Realized: ₹0 | Unrealized: ₹0</div>
+        </div>
+
+        <div class="card spot-card">
+          <div class="card-label">NIFTY SPOT</div>
+          <div class="card-value" id="spotPrice">0.00</div>
+          <div class="card-sub" id="expiryDate">Expiry: --</div>
+        </div>
+
+        <div class="card greeks-card">
+          <div class="card-label">PORTFOLIO NET DELTA</div>
+          <div class="card-value delta-value" id="netDelta">0.0000</div>
+          <div class="card-sub">Target: 0.0000 (Matched)</div>
+        </div>
+
+        <div class="card theta-card">
+          <div class="card-label">DAILY THETA (DECAY)</div>
+          <div class="card-value theta-value" id="netTheta">+0.00</div>
+          <div class="card-sub" id="adjCount">Adjustments: 0</div>
+        </div>
+      </section>
+
+      <!-- Live Delta Fluctuation & Trigger Gauge Bar -->
+      <section class="card delta-gauge-card">
+        <div class="card-header">
+          <h2>⚡ LIVE DELTA BREACH THRESHOLD (0.10 TRIGGER)</h2>
+          <span class="trigger-label" id="deltaTriggerStatus">NEUTRAL (OK)</span>
+        </div>
+        <div class="gauge-container">
+          <div class="gauge-bar-background">
+            <div class="gauge-bar-fill" id="deltaGaugeFill"></div>
+            <div class="gauge-marker trigger-marker" style="left: 100%;">
+              <span class="marker-label">0.10 TRIGGER</span>
+            </div>
+          </div>
+          <div class="gauge-footer">
+            <span>|Net Δ|: <strong id="absDeltaVal">0.0000</strong></span>
+            <span>Threshold Limit: <strong>0.1000</strong></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Position Legs Table -->
+      <section class="card table-card">
+        <div class="card-header">
+          <h2>📊 ACTIVE 4-LEG IRON CONDOR POSITION</h2>
+          <span class="straddle-indicator" id="straddleStatus">STRADDLE: NO</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="pos-table">
+            <thead>
+              <tr>
+                <th>TYPE</th>
+                <th>OPTION</th>
+                <th>STRIKE</th>
+                <th>ENTRY PREM</th>
+                <th>LIVE LTP</th>
+                <th>CURRENT DELTA</th>
+                <th>UNREALIZED P&amp;L</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="legsTableBody">
+              <tr><td colspan="8" class="text-center muted">Waiting for position data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Two Column Bottom Section: Adjustment History & Trade Logs -->
+      <div class="bottom-grid">
+        <!-- Adjustment History -->
+        <section class="card history-card">
+          <div class="card-header">
+            <h2>🔄 ADJUSTMENT HISTORY &amp; ROLLS</h2>
+          </div>
+          <div class="timeline-wrapper" id="adjTimeline">
+            <div class="muted text-center p-3">No adjustments executed yet</div>
+          </div>
+        </section>
+
+        <!-- Trade Executions Log -->
+        <section class="card trades-card">
+          <div class="card-header">
+            <h2>📜 TRADE EXECUTIONS &amp; LOGS</h2>
+          </div>
+          <div class="log-wrapper" id="tradeLogs">
+            <div class="muted text-center p-3">No trade logs found</div>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

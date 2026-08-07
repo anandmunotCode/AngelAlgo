@@ -6,9 +6,18 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Master datasets (large files kept local)
-nifty_1min_5y_master.csv
-nifty_1min_5y_features.csv
+# Position & trade logs (contain live data)
+positions.json
+paper_trades_log.csv
+trade_log.csv
 
-# Logs & temp
+# Instrument master cache
+instrument_master.json
+
+# Logs
+logs/
 *.log
+
+# IDE
+.vscode/
+.idea/
