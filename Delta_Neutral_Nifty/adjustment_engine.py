@@ -261,11 +261,11 @@ class AdjustmentEngine:
             )
 
         # Step 5: Place new short leg
-        token_info = self.api.get_token_info(self.expiry_date, new_short_strike, profitable_side)
+        token_info = self.api.get_token_info(self.expiry_date, new_short_strike, profitable_side) if self.api else None
         short_token = token_info["token"] if token_info else ""
-        short_symbol = token_info["symbol"] if token_info else ""
+        short_symbol = token_info["symbol"] if token_info else f"NIFTY_{int(new_short_strike)}_{profitable_side}"
 
-        if not paper_mode and token_info:
+        if not paper_mode and token_info and self.api:
             self.api.place_order(
                 short_symbol, short_token, "SELL",
                 config.LOT_SIZE * config.NUM_LOTS
@@ -285,9 +285,9 @@ class AdjustmentEngine:
         )
 
         # Step 6: Place new hedge
-        hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side)
+        hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side) if self.api else None
         hedge_token = hedge_token_info["token"] if hedge_token_info else ""
-        hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else ""
+        hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
 
         if not paper_mode and hedge_token_info:
             self.api.place_order(

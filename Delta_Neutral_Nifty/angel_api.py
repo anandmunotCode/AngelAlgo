@@ -456,3 +456,33 @@ class AngelOneAPI:
             logger.error(f"Error fetching trade book: {e}")
             return None
 
+    def get_deployed_margin(self, num_lots=1, is_straddle=False):
+        """
+        Fetch actual utilized margin / deployed capital from Angel RMS.
+        Falls back to dynamic margin calculation if API is offline or paper trading.
+        """
+        if self.smart_api:
+            try:
+                self.rate_limiter.wait()
+                rms = self.smart_api.rmsLimit()
+                if rms and isinstance(rms, dict) and rms.get("status") and "data" in rms:
+                    data = rms["data"]
+                    # Check utilisedDebits or sum of utilisedSpan + utilisedOptionpremium
+                    utilised = float(data.get("utilisedDebits", 0.0) or 0.0)
+                    if utilised <= 0:
+                        span = float(data.get("utilisedSpan", 0.0) or 0.0)
+                        prem = float(data.get("utilisedOptionpremium", 0.0) or 0.0)
+                        utilised = span + prem
+                    if utilised > 0:
+                        logger.debug(f"[RMS] Live Deployed Capital (Utilized Margin): Rs.{utilised:,.2f}")
+                        return utilised
+            except Exception as e:
+                logger.debug(f"Could not fetch RMS limits: {e}")
+
+        # Dynamic fallback based on structure (Iron Condor vs Straddle) and lot size
+        base_margin = config.DEFAULT_MARGIN_PER_LOT_STRADDLE if is_straddle else config.DEFAULT_MARGIN_PER_LOT_IC
+        estimated_margin = base_margin * num_lots
+        logger.debug(f"[ESTIMATED MARGIN] Structure={'Straddle' if is_straddle else 'Iron Condor'}, Lots={num_lots} -> Rs.{estimated_margin:,.2f}")
+        return estimated_margin
+
+

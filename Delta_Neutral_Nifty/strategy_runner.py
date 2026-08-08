@@ -331,15 +331,21 @@ class StrategyRunner:
 
         # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
         if self.pm.is_straddle:
-            # 1. Check 2% Capital Stop Loss & Spot Circuit Breaker
-            sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot)
+            # 1. Fetch Dynamic Deployed Capital (Utilized Margin) from Angel RMS / Dynamic Margin Engine
+            deployed_margin = self.api.get_deployed_margin(
+                num_lots=config.NUM_LOTS,
+                is_straddle=True
+            )
+
+            # 2. Check Strict 2.0% Deployed Capital Stop Loss & Spot Circuit Breaker
+            sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot, deployed_capital=deployed_margin)
             if sl_hit:
                 print_banner("STRADDLE STOP LOSS TRIGGERED")
                 logger.warning(f"[STRADDLE EXIT] {sl_reason}")
                 self.pm.close_all(reason=sl_reason)
                 return
 
-            # 2. Check 70% Straddle Premium Decay Profit Target
+            # 3. Check 70% Straddle Premium Decay Profit Target
             tp_hit, tp_reason = self.pm.check_straddle_profit_target()
             if tp_hit:
                 print_banner("STRADDLE 70% THETA DECAY PROFIT TARGET REACHED")

@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 
 from . import config
-from .utils import setup_logger, now_ist, format_pnl
+from .utils import setup_logger, now_ist, format_pnl, format_premium
 
 logger = setup_logger("positions")
 
@@ -221,12 +221,13 @@ class PositionManager:
             return True
         return False
 
-    def check_straddle_stop_loss(self, spot):
+    def check_straddle_stop_loss(self, spot, deployed_capital=None):
         """
-        Check Stop Loss rules ONLY when position is in STRADDLE phase:
-        Rule 1: Portfolio Net P&L <= - (2% of Deployed Capital) [e.g. ₹2,000 on ₹1 Lakh]
-        Rule 2: Spot distance from Straddle strike >= 1.25% (Emergency Circuit Breaker)
-
+        Check Stop Loss ONLY when position has reached STRADDLE mode:
+        1. Strict 2.0% Stop Loss on ACTUAL Deployed Capital (Utilized Margin).
+           Formula: Max Loss INR = Deployed Capital * 0.02 (e.g. 2% on utilized margin)
+        2. Spot Move Breach: Exit if spot moves by >= STRADDLE_SPOT_SL_PCT (1.25%) from straddle strike.
+        
         Returns (True, reason_str) if SL is triggered, else (False, "")
         """
         if not self.is_straddle or not self.is_active:
@@ -238,14 +239,20 @@ class PositionManager:
 
         straddle_strike = short_calls[-1]["strike"]
 
+        # Dynamic Deployed Capital (Utilized Margin)
+        if deployed_capital is None or deployed_capital <= 0:
+            deployed_capital = config.DEFAULT_MARGIN_PER_LOT_STRADDLE * config.NUM_LOTS
+
         # Rule 1: Strict 2% Deployed Capital Hard Stop Loss
-        max_allowed_loss_inr = config.CAPITAL_PER_LOT * config.NUM_LOTS * config.STRADDLE_CAPITAL_SL_PCT
+        max_allowed_loss_inr = deployed_capital * config.STRADDLE_CAPITAL_SL_PCT
         current_total_pnl = self.total_pnl
 
         if current_total_pnl <= -max_allowed_loss_inr:
+            loss_pct_actual = abs(current_total_pnl) / deployed_capital * 100
             reason = (
                 f"STRADDLE SL [2% CAPITAL LOSS LIMIT]: Total P&L {format_pnl(current_total_pnl)} "
-                f"breached 2% Capital Limit ({format_pnl(-max_allowed_loss_inr)})"
+                f"(-{loss_pct_actual:.2f}%) breached 2% Limit on Deployed Capital {format_premium(deployed_capital)} "
+                f"(Max Loss: {format_pnl(-max_allowed_loss_inr)})"
             )
             logger.warning(f"🚨 {reason}")
             return True, reason

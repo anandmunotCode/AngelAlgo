@@ -19,12 +19,16 @@ NIFTY_OPTIONS_EXCHANGE = "NFO"
 NIFTY_SYMBOL = "NIFTY"
 
 # ═══════════════════════════════════════════════════════════════
-# CAPITAL & RISK MANAGEMENT (INSTITUTIONAL GRADE)
+# DYNAMIC CAPITAL & RISK MANAGEMENT (INSTITUTIONAL GRADE)
 # ═══════════════════════════════════════════════════════════════
-CAPITAL_PER_LOT = 100000               # Total deployed capital per lot in INR (₹1,00,000)
-STRADDLE_CAPITAL_SL_PCT = 0.02         # Strict 2.0% capital Stop Loss (₹2,000 per lot)
+# Stop Loss is dynamically calculated on the ACTUAL Deployed Capital (Utilized Margin)
+STRADDLE_CAPITAL_SL_PCT = 0.02         # Strict 2.0% of dynamic deployed capital (e.g. 2% on utilized margin)
 STRADDLE_PROFIT_DECAY_PCT = 0.70       # 70% combined straddle premium decay for profit booking
-OTM_FULL_DECAY_PRICE = 1.0             # Exit when both short legs decay below ₹1.00 (Full OTM capture)
+OTM_FULL_DECAY_PRICE = 1.0             # Exit when both short legs decay below Rs.1.00 (Full OTM capture)
+
+# Dynamic Margin Estimation Fallbacks (used in paper mode or when API RMS is unavailable)
+DEFAULT_MARGIN_PER_LOT_IC = 65000.0    # Approximate exchange margin for 4-leg hedged Iron Condor
+DEFAULT_MARGIN_PER_LOT_STRADDLE = 95000.0 # Approximate exchange margin for 4-leg Straddle
 
 # ═══════════════════════════════════════════════════════════════
 # STRATEGY ENTRY PARAMETERS
