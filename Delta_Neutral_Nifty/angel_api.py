@@ -56,6 +56,7 @@ class AngelOneAPI:
         self.nifty_options = {}     # {expiry_str: {strike: {CE: token, PE: token}}}
         self.rate_limiter = AngelRateLimiter(max_per_second=7)
         self._ltp_cache = {}        # {(symbol, token): (timestamp, ltp)}
+        self._rms_cache = (0, 0.0)  # (timestamp, utilised_margin) TTL cached for 10 seconds
 
     def _load_env(self):
         """Load credentials from environment variables or .env file."""
@@ -459,8 +460,15 @@ class AngelOneAPI:
     def get_deployed_margin(self, num_lots=1, is_straddle=False):
         """
         Fetch actual utilized margin / deployed capital from Angel RMS.
+        Complies strictly with 2 req/sec rate limit by using a 10-second TTL cache.
         Falls back to dynamic margin calculation if API is offline or paper trading.
         """
+        now = time.time()
+        # 1. Return cached RMS margin if within 10-second TTL (Zero redundant API calls)
+        cached_time, cached_val = self._rms_cache
+        if (now - cached_time) < 10.0 and cached_val > 0:
+            return cached_val
+
         if self.smart_api:
             try:
                 self.rate_limiter.wait()
@@ -474,6 +482,7 @@ class AngelOneAPI:
                         prem = float(data.get("utilisedOptionpremium", 0.0) or 0.0)
                         utilised = span + prem
                     if utilised > 0:
+                        self._rms_cache = (now, utilised)
                         logger.debug(f"[RMS] Live Deployed Capital (Utilized Margin): Rs.{utilised:,.2f}")
                         return utilised
             except Exception as e:
