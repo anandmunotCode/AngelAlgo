@@ -19,27 +19,32 @@ NIFTY_OPTIONS_EXCHANGE = "NFO"
 NIFTY_SYMBOL = "NIFTY"
 
 # ═══════════════════════════════════════════════════════════════
+# CAPITAL & RISK MANAGEMENT (INSTITUTIONAL GRADE)
+# ═══════════════════════════════════════════════════════════════
+CAPITAL_PER_LOT = 100000               # Total deployed capital per lot in INR (₹1,00,000)
+STRADDLE_CAPITAL_SL_PCT = 0.02         # Strict 2.0% capital Stop Loss (₹2,000 per lot)
+STRADDLE_PROFIT_DECAY_PCT = 0.70       # 70% combined straddle premium decay for profit booking
+OTM_FULL_DECAY_PRICE = 1.0             # Exit when both short legs decay below ₹1.00 (Full OTM capture)
+
+# ═══════════════════════════════════════════════════════════════
 # STRATEGY ENTRY PARAMETERS
 # ═══════════════════════════════════════════════════════════════
-ENTRY_DELTA = 0.15                 # Short strangle legs (sell at this delta)
-HEDGE_DELTA = 0.05                 # Protective wings (buy at this delta)
+ENTRY_DELTA = 0.15                     # Short strangle legs (sell at this delta / nearest)
+HEDGE_DELTA = 0.05                     # Protective wings (buy at this delta / nearest)
 
 # ═══════════════════════════════════════════════════════════════
-# JANE STREET-GRADE ADJUSTMENT TRIGGERS
+# DYNAMIC ADJUSTMENT TRIGGERS (ACTIVE IN NON-STRADDLE PHASE)
 # ═══════════════════════════════════════════════════════════════
-# Primary Triggers (ANY one fires → evaluate adjustment)
-PORTFOLIO_DELTA_BREACH = 0.10      # |Net Delta| > this → rebalance
-PREMIUM_CAPTURE_PCT = 0.75         # Close profitable leg when 75% profit captured
-LOSING_LEG_DELTA_THRESHOLD = 0.30  # Adjust when losing leg |delta| exceeds this
-GAMMA_DANGER_THRESHOLD = 0.015     # High gamma = near ATM, danger zone
+# Primary Trigger: Losing leg premium surges by >= 50% from entry (e.g. 100 -> 150)
+LOSING_PREMIUM_SURGE_PCT = 0.50        # 50% expansion on losing leg
+PREMIUM_CAPTURE_PCT = 0.50             # Profitable leg captured 50%+ profit
+PORTFOLIO_DELTA_BREACH = 0.10          # |Net Delta| > 0.10 rebalance
+LOSING_LEG_DELTA_THRESHOLD = 0.30      # Losing leg |delta| > 0.30
+GAMMA_DANGER_THRESHOLD = 0.015         # High gamma risk trigger
 
-# Straddle Stop Condition & Stop Loss (Active ONLY after Straddle is reached)
-# 1. Stop Adjustments when both short strikes converge to same strike
-STRADDLE_PROXIMITY_PTS = 0         # 0 = exact straddle required to stop adjustments
-
-# 2. Straddle Phase Stop Loss (OR condition: whichever hits first exits trade)
-STRADDLE_MAX_LOSS_MULTIPLIER = 1.5   # Exit if loss >= 1.5x of initial net credit
-STRADDLE_SPOT_SL_PCT = 0.0125         # Exit if Nifty moves >= 1.25% from Straddle Strike
+# Straddle Convergence Setting
+STRADDLE_PROXIMITY_PTS = 0             # 0 = exact same strike required (Call Strike == Put Strike)
+STRADDLE_SPOT_SL_PCT = 0.0125          # Exit if Nifty moves >= 1.25% from Straddle Strike
 
 # ═══════════════════════════════════════════════════════════════
 # MONITORING FREQUENCY (INSTITUTIONAL GRADE)

@@ -329,16 +329,37 @@ class StrategyRunner:
         # Print status every refresh
         self._print_live_status(spot, T, portfolio)
 
-        # If straddle already reached: STOP adjustments and monitor Straddle Stop Loss
+        # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
         if self.pm.is_straddle:
+            # 1. Check 2% Capital Stop Loss & Spot Circuit Breaker
             sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot)
             if sl_hit:
                 print_banner("STRADDLE STOP LOSS TRIGGERED")
                 logger.warning(f"[STRADDLE EXIT] {sl_reason}")
                 self.pm.close_all(reason=sl_reason)
+                return
+
+            # 2. Check 70% Straddle Premium Decay Profit Target
+            tp_hit, tp_reason = self.pm.check_straddle_profit_target()
+            if tp_hit:
+                print_banner("STRADDLE 70% THETA DECAY PROFIT TARGET REACHED")
+                logger.info(f"[STRADDLE PROFIT EXIT] {tp_reason}")
+                self.pm.close_all(reason=tp_reason)
+                return
+
+            # Zero adjustments during straddle mode
             return
 
-        # Evaluate adjustment
+        # ─── NON-STRADDLE / OTM PHASE MONITORING ───────────────────
+        # 1. Check if both short legs have decayed below ₹1.00 (Full OTM Profit Capture)
+        otm_hit, otm_reason = self.pm.check_otm_full_decay()
+        if otm_hit:
+            print_banner("OTM FULL DECAY PROFIT TARGET REACHED (< ₹1.00)")
+            logger.info(f"[OTM PROFIT EXIT] {otm_reason}")
+            self.pm.close_all(reason=otm_reason)
+            return
+
+        # 2. Evaluate Dynamic Adjustment Triggers (e.g. 50% Losing Leg Surge)
         action = self.adj_engine.evaluate(spot, T, self.cached_chain_ltps)
         if action:
             self.adj_engine.execute_adjustment(

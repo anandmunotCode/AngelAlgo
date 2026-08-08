@@ -210,9 +210,12 @@ class PositionManager:
         if proximity <= config.STRADDLE_PROXIMITY_PTS:
             self.position["is_straddle_reached"] = True
             self.position["status"] = "STRADDLE"
+            # Record combined straddle entry premium for 70% decay target calculation
+            straddle_entry_prem = short_calls[-1]["current_premium"] + short_puts[-1]["current_premium"]
+            self.position["straddle_entry_combined_premium"] = straddle_entry_prem
             logger.warning(
                 f"[STRADDLE REACHED] Call={call_strike} | Put={put_strike} | "
-                f"Gap={proximity} pts → NO FURTHER ADJUSTMENTS"
+                f"Combined Premium={straddle_entry_prem:.2f} | Gap={proximity} pts → NO FURTHER ADJUSTMENTS"
             )
             self.save()
             return True
@@ -221,8 +224,8 @@ class PositionManager:
     def check_straddle_stop_loss(self, spot):
         """
         Check Stop Loss rules ONLY when position is in STRADDLE phase:
-        Rule 1: Portfolio Net P&L <= - (1.5 * initial_net_credit)
-        Rule 2: Spot distance from Straddle strike >= 1.25%
+        Rule 1: Portfolio Net P&L <= - (2% of Deployed Capital) [e.g. ₹2,000 on ₹1 Lakh]
+        Rule 2: Spot distance from Straddle strike >= 1.25% (Emergency Circuit Breaker)
 
         Returns (True, reason_str) if SL is triggered, else (False, "")
         """
@@ -235,17 +238,14 @@ class PositionManager:
 
         straddle_strike = short_calls[-1]["strike"]
 
-        # Calculate initial net credit collected for 1 lot
-        net_credit_inr = (self.position["total_premium_collected"] - self.position["total_premium_paid"]) * config.LOT_SIZE
-        max_allowed_loss_inr = abs(net_credit_inr) * config.STRADDLE_MAX_LOSS_MULTIPLIER
-
+        # Rule 1: Strict 2% Deployed Capital Hard Stop Loss
+        max_allowed_loss_inr = config.CAPITAL_PER_LOT * config.NUM_LOTS * config.STRADDLE_CAPITAL_SL_PCT
         current_total_pnl = self.total_pnl
 
-        # Rule 1: Net P&L Stop Loss
         if current_total_pnl <= -max_allowed_loss_inr:
             reason = (
-                f"STRADDLE SL [P&L BREACH]: Total P&L {format_pnl(current_total_pnl)} "
-                f"exceeded Max Loss limit {format_pnl(-max_allowed_loss_inr)}"
+                f"STRADDLE SL [2% CAPITAL LOSS LIMIT]: Total P&L {format_pnl(current_total_pnl)} "
+                f"breached 2% Capital Limit ({format_pnl(-max_allowed_loss_inr)})"
             )
             logger.warning(f"🚨 {reason}")
             return True, reason
@@ -258,6 +258,66 @@ class PositionManager:
                 f"from Straddle Strike {straddle_strike} (Limit: {config.STRADDLE_SPOT_SL_PCT*100:.2f}%)"
             )
             logger.warning(f"🚨 {reason}")
+            return True, reason
+
+        return False, ""
+
+    def check_straddle_profit_target(self):
+        """
+        Check Profit Target ONLY when position is in STRADDLE phase:
+        Rule: Exit all legs when combined straddle short premium decays by >= 70%
+        
+        Returns (True, reason_str) if profit target reached, else (False, "")
+        """
+        if not self.is_straddle or not self.is_active:
+            return False, ""
+
+        short_calls = self.short_call_legs
+        short_puts = self.short_put_legs
+        if not short_calls or not short_puts:
+            return False, ""
+
+        entry_combined = self.position.get("straddle_entry_combined_premium", 0.0)
+        if entry_combined <= 0:
+            entry_combined = short_calls[-1]["entry_premium"] + short_puts[-1]["entry_premium"]
+
+        live_combined = short_calls[-1]["current_premium"] + short_puts[-1]["current_premium"]
+        decay_pct = (entry_combined - live_combined) / max(entry_combined, 0.01)
+
+        if decay_pct >= config.STRADDLE_PROFIT_DECAY_PCT:
+            reason = (
+                f"STRADDLE PROFIT [70% THETA DECAY]: Straddle premium decayed {decay_pct*100:.1f}% "
+                f"(From {entry_combined:.2f} -> Live: {live_combined:.2f}) >= {config.STRADDLE_PROFIT_DECAY_PCT*100:.0f}%"
+            )
+            logger.info(f"🎯 {reason}")
+            return True, reason
+
+        return False, ""
+
+    def check_otm_full_decay(self):
+        """
+        Check Full Profit Decay when position never reached Straddle (OTM phase):
+        Rule: If both short CE and short PE LTPs drop below ₹1.00, full profit is collected.
+        
+        Returns (True, reason_str) if both short legs < ₹1.00, else (False, "")
+        """
+        if self.is_straddle or not self.is_active:
+            return False, ""
+
+        short_calls = self.short_call_legs
+        short_puts = self.short_put_legs
+        if not short_calls or not short_puts:
+            return False, ""
+
+        ce_ltp = short_calls[-1]["current_premium"]
+        pe_ltp = short_puts[-1]["current_premium"]
+
+        if ce_ltp <= config.OTM_FULL_DECAY_PRICE and pe_ltp <= config.OTM_FULL_DECAY_PRICE:
+            reason = (
+                f"OTM FULL DECAY [PREMIUM < Rs.{config.OTM_FULL_DECAY_PRICE:.2f}]: "
+                f"Both CE ({ce_ltp:.2f}) and PE ({pe_ltp:.2f}) decayed to zero. 100% Profit Captured!"
+            )
+            logger.info(f"[PROFIT] {reason}")
             return True, reason
 
         return False, ""

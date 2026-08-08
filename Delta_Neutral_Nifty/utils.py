@@ -168,7 +168,7 @@ def get_atm_strike(spot_price):
 
 def format_premium(value):
     """Format premium for display."""
-    return f"₹{value:,.2f}"
+    return f"Rs.{value:,.2f}"
 
 
 def format_delta(value):
@@ -179,7 +179,7 @@ def format_delta(value):
 def format_pnl(value):
     """Format P&L with color hint."""
     sign = "+" if value >= 0 else ""
-    return f"{sign}₹{value:,.2f}"
+    return f"{sign}Rs.{value:,.2f}"
 
 
 def print_banner(text, char="=", width=70):

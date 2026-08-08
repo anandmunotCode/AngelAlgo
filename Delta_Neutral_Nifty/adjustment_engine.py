@@ -86,18 +86,24 @@ class AdjustmentEngine:
         trigger = None
         profitable_side = None
 
-        # Trigger 1: Portfolio delta breach
-        if abs(net_delta) > config.PORTFOLIO_DELTA_BREACH:
-            # Positive net delta → market went up → PUT is profitable, CALL is losing
-            # Negative net delta → market went down → CALL is profitable, PUT is losing
-            if net_delta > 0:
-                profitable_side = "PE"
-                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} > +{config.PORTFOLIO_DELTA_BREACH}"
-            else:
-                profitable_side = "CE"
-                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} < -{config.PORTFOLIO_DELTA_BREACH}"
+        # Trigger 1: Losing Leg Premium Surge >= 50% from entry (e.g., 100 -> 150)
+        ce_surge = (short_ce["current_premium"] - short_ce["entry_premium"]) / max(short_ce["entry_premium"], 0.01)
+        pe_surge = (short_pe["current_premium"] - short_pe["entry_premium"]) / max(short_pe["entry_premium"], 0.01)
 
-        # Trigger 2: Premium capture on either leg
+        if ce_surge >= config.LOSING_PREMIUM_SURGE_PCT:
+            profitable_side = "PE"  # CE is losing (surged), PE is profitable
+            trigger = (
+                f"PREMIUM_SURGE: CE surged {ce_surge*100:.1f}% >= {config.LOSING_PREMIUM_SURGE_PCT*100:.0f}% "
+                f"(Entry: {short_ce['entry_premium']:.2f} -> Live: {short_ce['current_premium']:.2f})"
+            )
+        elif pe_surge >= config.LOSING_PREMIUM_SURGE_PCT:
+            profitable_side = "CE"  # PE is losing (surged), CE is profitable
+            trigger = (
+                f"PREMIUM_SURGE: PE surged {pe_surge*100:.1f}% >= {config.LOSING_PREMIUM_SURGE_PCT*100:.0f}% "
+                f"(Entry: {short_pe['entry_premium']:.2f} -> Live: {short_pe['current_premium']:.2f})"
+            )
+
+        # Trigger 2: Premium capture on winning leg (50%+ profit captured)
         if trigger is None:
             ce_capture = 1.0 - (short_ce["current_premium"] / max(short_ce["entry_premium"], 0.01))
             pe_capture = 1.0 - (short_pe["current_premium"] / max(short_pe["entry_premium"], 0.01))
@@ -109,7 +115,16 @@ class AdjustmentEngine:
                 profitable_side = "PE"
                 trigger = f"PREMIUM_CAPTURE: PE captured {pe_capture*100:.0f}% profit"
 
-        # Trigger 3: Losing leg delta threshold
+        # Trigger 3: Portfolio delta breach
+        if trigger is None and abs(net_delta) > config.PORTFOLIO_DELTA_BREACH:
+            if net_delta > 0:
+                profitable_side = "PE"
+                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} > +{config.PORTFOLIO_DELTA_BREACH}"
+            else:
+                profitable_side = "CE"
+                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} < -{config.PORTFOLIO_DELTA_BREACH}"
+
+        # Trigger 4: Losing leg delta threshold
         if trigger is None:
             ce_abs_delta = abs(ce_greeks["raw_delta"])
             pe_abs_delta = abs(pe_greeks["raw_delta"])
@@ -121,7 +136,7 @@ class AdjustmentEngine:
                 profitable_side = "CE"  # PE is losing (high delta), CE is profitable
                 trigger = f"DELTA_THRESHOLD: PE |Δ|={pe_abs_delta:.4f} > {config.LOSING_LEG_DELTA_THRESHOLD}"
 
-        # Trigger 4: Gamma danger
+        # Trigger 5: Gamma danger
         if trigger is None:
             ce_gamma = abs(ce_greeks.get("gamma", 0))
             pe_gamma = abs(pe_greeks.get("gamma", 0))
