@@ -66,10 +66,14 @@ class StrategyRunner:
 
         logger.info(f"Current weekly expiry: {self.expiry_date}")
 
-        # Check if we need to initialize a new position
-        if not self.pm.is_active:
-            if self.pm.position.get("expiry_date") != str(self.expiry_date):
-                self.pm.initialize_week(self.expiry_date)
+        # Check if we need to initialize a new position for current expiry
+        stored_expiry = self.pm.position.get("expiry_date")
+        if not stored_expiry or stored_expiry != str(self.expiry_date):
+            logger.info(f"New weekly cycle detected (stored: '{stored_expiry}', live: '{self.expiry_date}'). Initializing fresh position.")
+            self.pm.initialize_week(self.expiry_date)
+        elif not self.pm.is_active:
+            logger.info("Previous position inactive. Initializing fresh position.")
+            self.pm.initialize_week(self.expiry_date)
 
         # Start WebSocket V2 feeder for real-time ALL-strike streaming
         self._start_websocket_feeder()
