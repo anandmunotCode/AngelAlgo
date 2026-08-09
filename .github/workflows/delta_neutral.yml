@@ -1,14 +1,18 @@
 name: Delta Neutral Nifty - Paper Trading
 
 on:
-  # schedule:
-  #   - cron: '48 3 * * 1-4'
+  schedule:
+    # Runs Monday to Friday at 03:35 UTC (09:05 AM IST)
+    - cron: '35 3 * * 1-5'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-delta-neutral:
     runs-on: ubuntu-latest
-    timeout-minutes: 400  # ~6.5 hours for full market session
+    timeout-minutes: 420  # ~7 hours for full market session (09:05 to 15:35 IST)
 
     steps:
     - name: Checkout Code

@@ -141,9 +141,9 @@ class StrategyRunner:
 
             if not is_market_open(now):
                 # Check if post-market on expiry day
-                if is_expiry_day(now.date()) and now.hour >= 15:
+                if ((self.expiry_date and now.date() >= self.expiry_date) or is_expiry_day(now.date())) and now.hour >= 15:
                     if self.pm.is_active:
-                        logger.info("Expiry day market closed. Closing all positions.")
+                        logger.info(f"Expiry day ({self.expiry_date}) market closed. Closing all positions.")
                         self.pm.close_all("EXPIRY_CLOSE")
                     break
 
@@ -327,20 +327,20 @@ class StrategyRunner:
         portfolio = calculate_portfolio_greeks(self.pm.open_legs, spot, T)
         net_delta = portfolio["net_delta"]
 
-        # Persist live greeks for Node.js Web Dashboard streaming
-        self.pm.update_live_greeks(portfolio, spot)
+        # Fetch deployed margin (utilizes 10s TTL cache, 0.1 req/sec max)
+        deployed_margin = self.api.get_deployed_margin(
+            num_lots=config.NUM_LOTS,
+            is_straddle=self.pm.is_straddle
+        )
+
+        # Persist live greeks, margin & mode for Node.js Web Dashboard streaming
+        self.pm.update_live_greeks(portfolio, spot, deployed_margin=deployed_margin, is_paper=self.paper_mode)
 
         # Print status every refresh
         self._print_live_status(spot, T, portfolio)
 
         # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
         if self.pm.is_straddle:
-            # 1. Fetch Dynamic Deployed Capital (Utilized Margin) from Angel RMS / Dynamic Margin Engine
-            deployed_margin = self.api.get_deployed_margin(
-                num_lots=config.NUM_LOTS,
-                is_straddle=True
-            )
-
             # 2. Check Strict 2.0% Deployed Capital Stop Loss & Spot Circuit Breaker
             sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot, deployed_capital=deployed_margin)
             if sl_hit:

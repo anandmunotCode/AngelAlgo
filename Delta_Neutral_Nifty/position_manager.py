@@ -134,21 +134,49 @@ class PositionManager:
                     leg["current_delta"] = float(current_delta)
                 return
 
-    def update_live_greeks(self, portfolio, spot):
-        """Update position state with live portfolio greeks for dashboard streaming."""
+    def update_live_greeks(self, portfolio, spot, deployed_margin=None, is_paper=True):
+        """Update position state with live portfolio greeks, P&L, and margin for dashboard streaming."""
         self.position["spot_price"] = float(spot)
+        self.position["trading_mode"] = "PAPER_TRADING" if is_paper else "LIVE_TRADING"
+        self.position["is_paper_trading"] = bool(is_paper)
         self.position["net_delta"] = float(portfolio.get("net_delta", 0.0))
         self.position["net_gamma"] = float(portfolio.get("net_gamma", 0.0))
         self.position["net_theta"] = float(portfolio.get("net_theta", 0.0))
         self.position["net_vega"] = float(portfolio.get("net_vega", 0.0))
-        # Update individual leg deltas
+
+        # Dynamic Deployed Margin & P&L summaries
+        margin = deployed_margin if (deployed_margin and deployed_margin > 0) else (
+            config.DEFAULT_MARGIN_PER_LOT_STRADDLE * config.NUM_LOTS if self.is_straddle 
+            else config.DEFAULT_MARGIN_PER_LOT_IC * config.NUM_LOTS
+        )
+        self.position["deployed_margin"] = float(margin)
+        self.position["total_realized_pnl"] = float(self.total_realized_pnl)
+        self.position["total_unrealized_pnl"] = float(self.total_unrealized_pnl)
+        self.position["total_pnl"] = float(self.total_pnl)
+        self.position["roi_pct"] = round((self.total_pnl / margin * 100.0) if margin > 0 else 0.0, 2)
+
+        # Update individual leg deltas & surge progress
         for leg_info in portfolio.get("leg_greeks", []):
             leg_id = leg_info.get("leg_id")
             if leg_id:
                 for leg in self.position["legs"]:
                     if leg["id"] == leg_id:
                         leg["current_delta"] = abs(float(leg_info.get("raw_delta", 0)))
+                        leg["current_iv"] = float(leg_info.get("iv", 0))
                         break
+
+        # Check maximum short leg surge % towards the 50% trigger
+        max_surge_pct = 0.0
+        for leg in self.open_short_legs:
+            entry_p = leg.get("entry_premium", 0.0)
+            curr_p = leg.get("current_premium", entry_p)
+            if entry_p > 0:
+                surge = (curr_p - entry_p) / entry_p
+                if surge > max_surge_pct:
+                    max_surge_pct = surge
+        self.position["max_short_surge_pct"] = round(max_surge_pct * 100.0, 2)
+        self.position["surge_trigger_pct"] = config.LOSING_PREMIUM_SURGE_PCT * 100.0
+
         self.save()
 
     # ─── POSITION QUERIES ─────────────────────────────────────────

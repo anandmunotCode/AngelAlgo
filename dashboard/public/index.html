@@ -3,158 +3,280 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Delta Neutral Nifty - Institutional Trading Terminal</title>
+  <title>Delta Neutral Nifty — Institutional Trading Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <div class="dashboard-wrapper">
-    <!-- Top Header -->
-    <header class="navbar">
-      <div class="brand">
-        <div class="logo-icon">⚡</div>
-        <div class="brand-text">
-          <h1>DELTA NEUTRAL <span>NIFTY</span></h1>
-          <p class="subtitle">Institutional Volatility & Adjustment Terminal</p>
+  <div class="terminal-container">
+    
+    <!-- Top Institutional Header -->
+    <header class="terminal-header">
+      <div class="header-left">
+        <div class="terminal-logo">
+          <span class="logo-symbol">⚡</span>
+          <span class="pulse-ring"></span>
+        </div>
+        <div class="terminal-titles">
+          <div class="title-row">
+            <h1>DELTA NEUTRAL <span class="highlight">NIFTY</span></h1>
+            <span class="version-tag">INSTITUTIONAL v2.5</span>
+          </div>
+          <p class="subtitle">Zero-Touch Volatility Arbitrage &amp; Dynamic RMS Risk Engine</p>
         </div>
       </div>
-      <div class="status-bar">
-        <div class="badge mode-badge" id="modeBadge">PAPER TRADING</div>
-        <div class="badge status-badge" id="statusBadge">CONNECTING...</div>
-        <div class="clock" id="liveClock">00:00:00 IST</div>
+
+      <div class="header-right">
+        <!-- Live Connection Pill -->
+        <div class="status-pill connection-pill" id="connectionPill">
+          <span class="status-dot"></span>
+          <span class="status-text" id="statusText">CONNECTING...</span>
+        </div>
+
+        <!-- Mode Badge (Paper vs Live) -->
+        <div class="mode-badge paper-mode" id="modeBadge">
+          <span class="mode-icon">🧪</span>
+          <span class="mode-text" id="modeText">PAPER SIMULATION</span>
+        </div>
+
+        <!-- Live Clock -->
+        <div class="clock-display">
+          <span class="clock-icon">🕒</span>
+          <span id="liveClock">00:00:00 IST</span>
+        </div>
       </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="grid-container">
+    <!-- Main Content Grid -->
+    <main class="terminal-grid">
       
-      <!-- Live Metrics Hero Grid -->
-      <section class="hero-grid">
-        <div class="card pnl-card">
-          <div class="card-label">TOTAL P&amp;L</div>
-          <div class="card-value pnl-value" id="totalPnl">₹0.00</div>
-          <div class="card-sub" id="pnlBreakdown">Realized: ₹0 | Unrealized: ₹0</div>
+      <!-- Row 1: 4 Key Metric Hero Cards -->
+      <section class="kpi-grid">
+        
+        <!-- Card 1: Total P&L & ROI -->
+        <div class="kpi-card pnl-card" id="cardPnl">
+          <div class="card-top">
+            <span class="kpi-title">TOTAL NET P&amp;L</span>
+            <span class="roi-badge" id="roiBadge">+0.00% ROI</span>
+          </div>
+          <div class="kpi-hero-val" id="totalPnl">₹0.00</div>
+          <div class="kpi-sub-row">
+            <span class="sub-item">Realized: <strong id="realizedPnl">₹0.00</strong></span>
+            <span class="sub-divider">•</span>
+            <span class="sub-item">Unrealized: <strong id="unrealizedPnl">₹0.00</strong></span>
+          </div>
         </div>
 
-        <div class="card spot-card">
-          <div class="card-label">NIFTY SPOT</div>
-          <div class="card-value" id="spotPrice">0.00</div>
-          <div class="card-sub" id="expiryDate">Expiry: --</div>
+        <!-- Card 2: Nifty Spot & Expiry -->
+        <div class="kpi-card spot-card">
+          <div class="card-top">
+            <span class="kpi-title">NIFTY 50 SPOT</span>
+            <span class="expiry-badge" id="expiryBadge">EXPIRY: --</span>
+          </div>
+          <div class="kpi-hero-val spot-val" id="spotPrice">--</div>
+          <div class="kpi-sub-row">
+            <span class="sub-item">Exchange: <strong>NSE / NFO</strong></span>
+            <span class="sub-divider">•</span>
+            <span class="sub-item">Lot Size: <strong>65 Qty</strong></span>
+          </div>
         </div>
 
-        <div class="card greeks-card">
-          <div class="card-label">PORTFOLIO NET DELTA</div>
-          <div class="card-value delta-value" id="netDelta">0.0000</div>
-          <div class="card-sub">Target: 0.0000 (Matched)</div>
+        <!-- Card 3: Deployed Capital & RMS Margin -->
+        <div class="kpi-card margin-card">
+          <div class="card-top">
+            <span class="kpi-title">DEPLOYED MARGIN (RMS)</span>
+            <span class="straddle-state-badge" id="straddlePhaseBadge">PHASE: IRON CONDOR</span>
+          </div>
+          <div class="kpi-hero-val margin-val" id="deployedMargin">₹0.00</div>
+          <div class="kpi-sub-row">
+            <span class="sub-item">2% SL Limit: <strong id="straddleSlLimit" class="sl-limit-val">₹0.00</strong></span>
+            <span class="sub-divider">•</span>
+            <span class="sub-item">Source: <strong id="marginSource">RMS Live</strong></span>
+          </div>
         </div>
 
-        <div class="card theta-card">
-          <div class="card-label">DAILY THETA (DECAY)</div>
-          <div class="card-value theta-value" id="netTheta">+0.00</div>
-          <div class="card-sub" id="adjCount">Adjustments: 0</div>
-        </div>
-      </section>
-
-      <!-- Live Delta Fluctuation & Trigger Gauge Bar -->
-      <section class="card delta-gauge-card">
-        <div class="card-header">
-          <h2>⚡ LIVE DELTA BREACH THRESHOLD (0.10 TRIGGER)</h2>
-          <span class="trigger-label" id="deltaTriggerStatus">NEUTRAL (OK)</span>
-        </div>
-        <div class="gauge-container">
-          <div class="gauge-bar-background">
-            <div class="gauge-bar-fill" id="deltaGaugeFill"></div>
-            <div class="gauge-marker trigger-marker" style="left: 100%;">
-              <span class="marker-label">0.10 TRIGGER</span>
+        <!-- Card 4: Portfolio Net Delta & Theta -->
+        <div class="kpi-card greeks-card">
+          <div class="card-top">
+            <span class="kpi-title">PORTFOLIO GREEKS</span>
+            <span class="equilibrium-badge" id="equilibriumBadge">EQUILIBRIUM: OK</span>
+          </div>
+          <div class="greeks-dual-val">
+            <div class="greek-item">
+              <span class="greek-label">NET DELTA</span>
+              <span class="greek-value" id="netDelta">0.0000</span>
+            </div>
+            <div class="greek-divider"></div>
+            <div class="greek-item">
+              <span class="greek-label">DAILY THETA</span>
+              <span class="greek-value theta-val" id="netTheta">+0.00</span>
             </div>
           </div>
-          <div class="gauge-footer">
-            <span>|Net Δ|: <strong id="absDeltaVal">0.0000</strong></span>
-            <span>Threshold Limit: <strong>0.1000</strong></span>
+          <div class="kpi-sub-row">
+            <span class="sub-item">Gamma: <strong id="netGamma">0.0000</strong></span>
+            <span class="sub-divider">•</span>
+            <span class="sub-item">Vega: <strong id="netVega">0.00</strong></span>
           </div>
         </div>
+
       </section>
 
-      <!-- Active Position Legs Table -->
-      <section class="card table-card">
-        <div class="card-header">
-          <h2>📊 ACTIVE 4-LEG IRON CONDOR POSITION</h2>
-          <span class="straddle-indicator" id="straddleStatus">STRADDLE: NO</span>
+      <!-- Row 2: Strategy Dynamic Risk Gauges (50% Surge Meter & Straddle Risk Radar) -->
+      <section class="gauges-grid">
+        
+        <!-- Gauge 1: 50% Short Leg Expansion Trigger Meter -->
+        <div class="gauge-card">
+          <div class="gauge-header">
+            <div class="gauge-title-group">
+              <span class="gauge-icon">📈</span>
+              <div>
+                <h3>50% SHORT LEG SURGE MONITOR</h3>
+                <p class="gauge-desc">Tracks losing short leg premium expansion towards the 50% rebalance trigger</p>
+              </div>
+            </div>
+            <span class="gauge-status-tag" id="surgeStatusTag">NORMAL (SAFE)</span>
+          </div>
+          
+          <div class="gauge-track">
+            <div class="gauge-bar" id="surgeProgressBar" style="width: 0%;">
+              <span class="bar-glow"></span>
+            </div>
+            <div class="gauge-marker safe-zone" style="left: 30%;">
+              <span class="marker-tag">30% Warning</span>
+            </div>
+            <div class="gauge-marker trigger-zone" style="left: 50%;">
+              <span class="marker-tag">50% TRIGGER</span>
+            </div>
+          </div>
+
+          <div class="gauge-footer">
+            <span>Max Expansion: <strong id="maxSurgeVal">0.0%</strong></span>
+            <span>Trigger Threshold: <strong>50.0% Surge</strong></span>
+            <span>Action: <strong>Roll Profitable Spread</strong></span>
+          </div>
         </div>
-        <div class="table-wrapper">
-          <table class="pos-table">
+
+        <!-- Gauge 2: Straddle 2% Dynamic Stop Loss Radar -->
+        <div class="gauge-card">
+          <div class="gauge-header">
+            <div class="gauge-title-group">
+              <span class="gauge-icon">🛡️</span>
+              <div>
+                <h3>STRADDLE PHASE 2% DYNAMIC CAPITAL SL</h3>
+                <p class="gauge-desc">Active only when Short Call Strike == Short Put Strike (Zero adjustments)</p>
+              </div>
+            </div>
+            <span class="gauge-status-tag" id="straddleRiskTag">STANDBY (NON-STRADDLE)</span>
+          </div>
+
+          <div class="gauge-track sl-track">
+            <div class="gauge-bar sl-bar" id="straddleSlProgressBar" style="width: 0%;">
+              <span class="bar-glow"></span>
+            </div>
+            <div class="gauge-marker target-zone" style="left: 70%;">
+              <span class="marker-tag">70% Decay (TP)</span>
+            </div>
+          </div>
+
+          <div class="gauge-footer">
+            <span>Current Loss: <strong id="straddleCurrentLoss">₹0.00 (0.0%)</strong></span>
+            <span>Hard Stop Limit: <strong id="straddleMaxLoss">₹0.00 (-2.0%)</strong></span>
+            <span>Target: <strong>70% Theta Decay</strong></span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Row 3: Active 4-Leg Position Matrix -->
+      <section class="terminal-panel table-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="panel-icon">📊</span>
+            <h2>ACTIVE 4-LEG DERIVATIVES POSITION MATRIX</h2>
+          </div>
+          <div class="panel-actions">
+            <span class="legs-count-badge" id="activeLegsCount">4 ACTIVE LEGS</span>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="matrix-table">
             <thead>
               <tr>
                 <th>TYPE</th>
                 <th>OPTION</th>
                 <th>STRIKE</th>
-                <th>ENTRY PREM</th>
+                <th>ENTRY PRICE</th>
                 <th>LIVE LTP</th>
-                <th>CURRENT DELTA</th>
+                <th>DELTA (Δ)</th>
+                <th>IV %</th>
                 <th>UNREALIZED P&amp;L</th>
+                <th>SURGE STATUS</th>
                 <th>STATUS</th>
               </tr>
             </thead>
-            <tbody id="legsTableBody">
-              <tr><td colspan="8" class="text-center muted">Waiting for position data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Closed / Exited Legs History Table -->
-      <section class="card table-card">
-        <div class="card-header">
-          <h2>🏁 EXITED LEGS HISTORY (CLOSED ON ADJUSTMENT / SL)</h2>
-        </div>
-        <div class="table-wrapper">
-          <table class="pos-table">
-            <thead>
+            <tbody id="matrixTableBody">
               <tr>
-                <th>TYPE</th>
-                <th>OPTION</th>
-                <th>STRIKE</th>
-                <th>ENTRY PREM</th>
-                <th>EXIT PREM</th>
-                <th>REALIZED P&amp;L</th>
-                <th>EXIT TIME</th>
-                <th>REASON</th>
+                <td colspan="10" class="empty-state">
+                  <span>No Positions Open</span>
+                </td>
               </tr>
-            </thead>
-            <tbody id="closedLegsTableBody">
-              <tr><td colspan="8" class="text-center muted">No exited legs yet</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <!-- Two Column Bottom Section: Adjustment History & Trade Logs -->
-      <div class="bottom-grid">
-        <!-- Adjustment History -->
-        <section class="card history-card">
-          <div class="card-header">
-            <h2>🔄 ADJUSTMENT HISTORY &amp; ROLLS</h2>
+      <!-- Row 4: Two Column Splits: Adjustment Rolls History & Execution Audit Logs -->
+      <section class="bottom-split-grid">
+        
+        <!-- Left: Adjustment History & Rolls Timeline -->
+        <div class="terminal-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <span class="panel-icon">🔄</span>
+              <h2>ADJUSTMENT &amp; ROLL TIMELINE</h2>
+            </div>
+            <span class="counter-badge" id="adjCountBadge">0 ROLLS</span>
           </div>
-          <div class="timeline-wrapper" id="adjTimeline">
-            <div class="muted text-center p-3">No adjustments executed yet</div>
+          <div class="timeline-scroll-box" id="adjustmentTimeline">
+            <div class="empty-log-state">Zero adjustments executed. Portfolio in equilibrium.</div>
           </div>
-        </section>
+        </div>
 
-        <!-- Trade Executions Log -->
-        <section class="card trades-card">
-          <div class="card-header">
-            <h2>📜 TRADE EXECUTIONS &amp; LOGS</h2>
+        <!-- Right: Execution Audit Log -->
+        <div class="terminal-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <span class="panel-icon">📜</span>
+              <h2>EXECUTION AUDIT LOGS &amp; RMS SYNC</h2>
+            </div>
+            <span class="counter-badge" id="tradesCountBadge">0 EVENTS</span>
           </div>
-          <div class="log-wrapper" id="tradeLogs">
-            <div class="muted text-center p-3">No trade logs found</div>
+          <div class="terminal-log-box" id="auditLogsBox">
+            <div class="empty-log-state">Awaiting execution audit stream...</div>
           </div>
-        </section>
-      </div>
+        </div>
+
+      </section>
 
     </main>
+
+    <!-- Footer Status Line -->
+    <footer class="terminal-footer">
+      <div class="footer-left">
+        <span class="footer-dot"></span>
+        <span>Institutional Delta-Neutral Volatility Engine • Angel One SmartAPI SmartWebSocket V2</span>
+      </div>
+      <div class="footer-right">
+        <span>Latency: <strong id="latencyVal">&lt; 15ms</strong></span>
+        <span class="footer-divider">•</span>
+        <span>Refresh: <strong>500ms Non-Stop</strong></span>
+      </div>
+    </footer>
+
   </div>
 
   <script src="app.js"></script>

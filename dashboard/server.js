@@ -25,26 +25,37 @@ const POSITION_FILE_PATHS = [
 const TRADE_LOG_PATHS = [
   path.join(__dirname, '..', 'trade_log.csv'),
   path.join(__dirname, '..', 'paper_trades_log.csv'),
-  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'trade_log.csv')
+  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'trade_log.csv'),
+  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'paper_trades_log.csv')
 ];
+
+let cachedPosition = null;
+let cachedTrades = [];
+let lastMtime = 0;
 
 function readPositionData() {
   for (const filePath of POSITION_FILE_PATHS) {
     try {
       if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        if (raw && raw.trim()) {
-          return JSON.parse(raw);
+        const stats = fs.statSync(filePath);
+        if (stats.mtimeMs !== lastMtime || !cachedPosition) {
+          const raw = fs.readFileSync(filePath, 'utf-8');
+          if (raw && raw.trim()) {
+            cachedPosition = JSON.parse(raw);
+            lastMtime = stats.mtimeMs;
+          }
         }
+        return cachedPosition;
       }
     } catch (err) {
       console.error(`Error reading position file ${filePath}:`, err.message);
     }
   }
-  return null;
+  return cachedPosition;
 }
 
 function readTradeLogs() {
+  const allTrades = [];
   for (const filePath of TRADE_LOG_PATHS) {
     try {
       if (fs.existsSync(filePath)) {
@@ -52,7 +63,6 @@ function readTradeLogs() {
         const lines = raw.trim().split('\n');
         if (lines.length <= 1) continue;
         const headers = lines[0].split(',').map(h => h.trim());
-        const trades = [];
         for (let i = 1; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
           const values = lines[i].split(',').map(v => v.trim());
@@ -60,48 +70,58 @@ function readTradeLogs() {
           headers.forEach((h, idx) => {
             entry[h] = values[idx] || '';
           });
-          trades.push(entry);
+          allTrades.push(entry);
         }
-        if (trades.length > 0) return trades.reverse();
       }
     } catch (err) {
       console.error(`Error reading trade log ${filePath}:`, err.message);
     }
   }
-  return [];
+  return allTrades.reverse();
 }
+
+function getPayload() {
+  const pos = readPositionData();
+  const trades = readTradeLogs();
+  return {
+    position: pos,
+    trades: trades,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// Watch position file for instant sub-second broadcast
+POSITION_FILE_PATHS.forEach(p => {
+  if (fs.existsSync(p)) {
+    try {
+      fs.watch(p, { persistent: false }, () => {
+        const payload = getPayload();
+        io.emit('update', payload);
+      });
+    } catch (e) {
+      // Ignore watch setup errors
+    }
+  }
+});
 
 // REST APIs
 app.get('/api/status', (req, res) => {
-  const pos = readPositionData();
-  const trades = readTradeLogs();
-  res.json({ position: pos, trades: trades, timestamp: new Date().toISOString() });
+  res.json(getPayload());
 });
 
-// WebSocket real-time broadcast loop (1000ms interval)
+// WebSocket real-time broadcast loop (500ms interval for ultra-smooth responsiveness)
 io.on('connection', (socket) => {
-  console.log('Client connected to dashboard WebSocket');
-  
-  // Initial send
-  const pos = readPositionData();
-  const trades = readTradeLogs();
-  socket.emit('update', { position: pos, trades: trades, timestamp: new Date().toISOString() });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected');
-  });
+  socket.emit('update', getPayload());
 });
 
 setInterval(() => {
-  const pos = readPositionData();
-  const trades = readTradeLogs();
-  io.emit('update', { position: pos, trades: trades, timestamp: new Date().toISOString() });
-}, 1000);
+  io.emit('update', getPayload());
+}, 500);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`====================================================`);
-  console.log(`🔥 DELTA NEUTRAL NIFTY DASHBOARD RUNNING 🔥`);
+  console.log(`🔥 DELTA NEUTRAL NIFTY REAL-TIME DASHBOARD ACTIVE 🔥`);
   console.log(`   URL: http://localhost:${PORT}`);
   console.log(`====================================================`);
 });

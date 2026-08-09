@@ -9,7 +9,7 @@
 
 ## 1. STRATEGY PHILOSOPHY & CORE LOGIC
 
-The strategy is a **Dynamic 4-Leg Delta-Neutral Iron Condor** designed to capture Theta decay and Volatility Risk Premium (VRP) in Nifty 50 weekly options while isolating directional risk through mathematical rebalancing.
+The strategy is a **Positional / Multi-Day Dynamic Delta-Neutral Iron Condor** designed to capture Theta decay and Volatility Risk Premium (VRP) across the **entire weekly expiry cycle** (carried overnight from Monday/Entry day through Thursday Expiry). Directional risk is systematically neutralized through mathematical delta rebalancing without intraday premature exits.
 
 ```
                   INITIAL IRON CONDOR (09:18 IST)
@@ -27,9 +27,10 @@ The strategy is a **Dynamic 4-Leg Delta-Neutral Iron Condor** designed to captur
 
 ## 2. LIFECYCLE & EXECUTION TIMELINE
 
-### Phase 1: Entry Cycle (09:18 AM IST)
+### Phase 1: Entry Cycle (09:18 AM IST on Entry Day)
+- **Nature**: **Positional (Carried Overnight Across Days)** until Thursday weekly expiry.
 - **Trigger**: 3 minutes post market open (`ENTRY_DELAY_MINUTES = 3`) to bypass opening bid-ask spread expansion.
-- **Expiry Selection**: Automatically selects nearest upcoming Thursday weekly expiry (`WEEKLY_EXPIRY_DAY = 3`).
+- **Expiry Selection**: Automatically targets the nearest upcoming Thursday weekly expiry (`WEEKLY_EXPIRY_DAY = 3`).
 - **Strike Selection Engine (`greeks_engine.find_strike_at_delta`)**:
   - **Short Call**: Strike with $|\Delta| \approx 0.15$ (or closest available).
   - **Short Put**: Strike with $|\Delta| \approx 0.15$ (or closest available).
@@ -92,8 +93,21 @@ $$\text{Short Call Strike} = \text{Short Put Strike}$$
 
 ---
 
-### Phase 5: Clean Market Close (15:30 IST)
-- All positions are closed, trade logs are saved, and the engine cleanly terminates without holding overnight risk.
+### Phase 5: Positional Multi-Day Lifecycle & Expiry Settlement
+
+This is a **strictly Positional / Multi-Day Strategy** (NOT an intraday scalper).
+
+1. **Daily Session Pause (15:30 IST on Non-Expiry Days e.g. Mon–Wed)**:
+   - Positions are **HELD OVERNIGHT** in the Demat account (and in paper state).
+   - Realized profits from previous rolls and all open legs remain securely saved in `positions.json`.
+   - The engine exits cleanly at 15:30 IST to avoid unnecessary CPU/GitHub Actions runner billing overnight.
+2. **Next Morning Resumption (09:15 IST)**:
+   - When the runner restarts next morning, `PositionManager` instantly loads the existing open legs from `positions.json`.
+   - Live WebSocket and option chain streams reconnect, and real-time monitoring resumes automatically.
+3. **Weekly Expiry Settlement (Thursday 15:15–15:30 IST)**:
+   - On Thursday (weekly expiry day), all remaining open legs are squared off before market close.
+   - Total net weekly profit/loss is booked and finalized into `trade_log.csv`.
+   - A fresh Iron Condor is initiated in the next weekly expiry cycle.
 
 ---
 
@@ -165,3 +179,37 @@ d:\AngelAlgo\
 | `DIVIDEND_YIELD` | `0.012` | Nifty dividend yield ($1.2\%$) |
 | `ENTRY_DELAY_MINUTES` | `3` | Start time at 09:18 IST (3m after open) |
 | `MARKET_CLOSE_HOUR/MIN` | `15:30` | Auto square-off at market close |
+
+---
+
+## 6. DUAL-MODE EXECUTION & INSTITUTIONAL WEB DASHBOARD
+
+### Dual Execution Modes (Paper Simulation vs Live Real Trading)
+The system supports identical mathematical and operational parity in both modes:
+
+- **Paper Trading Mode (Default)**:
+  ```powershell
+  python -m Delta_Neutral_Nifty
+  ```
+  Uses live Angel One tick prices and live Greeks to simulate entries, rolls, and P&L without placing live broker orders.
+
+- **Real Live Trading Mode**:
+  ```powershell
+  python -m Delta_Neutral_Nifty --live
+  ```
+  Executes live orders on Angel One SmartAPI, monitors live RMS margin debits, and enforces strict risk controls.
+
+### Automated Cloud Execution (GitHub Actions)
+- Workflow file: `.github/workflows/delta_neutral.yml`
+- Scheduled on market days (`09:15 IST / 03:45 UTC`) with manual `workflow_dispatch` trigger.
+- Automatically commits and pushes trade logs and positions back to GitHub at market close.
+
+### Institutional Real-Time Web Dashboard
+- **Backend**: Node.js + Express + Socket.io (`dashboard/server.js`) on Port 3000.
+- **Frontend**: Obsidian Dark UI with 4 Hero KPI Cards, 50% Short Surge Bar, Straddle Phase 2% Capital SL Radar, and Live 4-Leg Derivative Matrix.
+- **Run Command**:
+  ```powershell
+  cd d:\AngelAlgo\dashboard
+  node server.js
+  ```
+
