@@ -2,8 +2,8 @@ name: Delta Neutral Nifty - Paper Trading
 
 on:
   schedule:
-    # Runs Monday to Friday at 03:35 UTC (09:05 AM IST)
-    - cron: '35 3 * * 1-5'
+    # Runs Monday to Friday at 03:30 UTC (09:00 AM IST) - 15 mins before market open
+    - cron: '30 3 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   run-delta-neutral:
     runs-on: ubuntu-latest
-    timeout-minutes: 420  # ~7 hours for full market session (09:05 to 15:35 IST)
+    timeout-minutes: 420  # ~7 hours for full market session (09:00 to 15:35 IST)
 
     steps:
     - name: Checkout Code
@@ -42,6 +42,7 @@ jobs:
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add -A positions.json trade_log.csv paper_trades_log.csv logs/
+        git add positions.json trade_log.csv || true
+        git add paper_trades_log.csv logs/ 2>/dev/null || true
         git commit -m "Auto-update delta neutral paper trading results [skip ci]" || exit 0
         git push
