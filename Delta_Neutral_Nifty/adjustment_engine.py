@@ -226,15 +226,8 @@ class AdjustmentEngine:
             logger.error("Could not find suitable strike for new short leg!")
             return False
 
-        # Step 4: Find new hedge strike matching the LOSING SIDE'S HEDGE DELTA
-        # To achieve complete 4-leg Net Delta = 0.00:
-        # Net Delta (Losing Spread) + Net Delta (New Spread) must equal 0.00.
-        # So we match both Short Delta AND Hedge Delta to the losing side!
-        losing_hedge = action.get("losing_hedge")
-        if losing_hedge:
-            target_hedge_delta = abs(losing_hedge.get("current_delta", config.HEDGE_DELTA))
-        else:
-            target_hedge_delta = config.HEDGE_DELTA
+        # Step 4: Find new hedge strike at 0.05 delta (config.HEDGE_DELTA) per Strategy Blueprint
+        target_hedge_delta = config.HEDGE_DELTA
 
         new_hedge_strike, new_hedge_delta, new_hedge_iv, new_hedge_premium = \
             greeks_engine.find_strike_at_delta(

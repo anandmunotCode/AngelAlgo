@@ -370,15 +370,15 @@ class WebSocketFeeder:
         exchange_type = message.get("exchange_type", message.get("exchangeType", 0))
 
         if exchange_type == 1 or token == str(config.NIFTY_SPOT_TOKEN):
-            # NSE Cash (Nifty Spot) — price in paise if > 50,000
-            spot = float(ltp_raw) / 100.0 if ltp_raw > 50000 else float(ltp_raw)
+            # NSE Cash (Nifty Spot) — price sent in paise (divided by 100)
+            spot = float(ltp_raw) / 100.0
             with self._lock:
                 if spot > 0:
                     self._spot_price = spot
             return
 
-        # NFO option tick — price in paise (divided by 100)
-        ltp = float(ltp_raw) / 100.0 if ltp_raw > 500 else float(ltp_raw)
+        # NFO option tick — price ALWAYS sent in paise (divided by 100)
+        ltp = float(ltp_raw) / 100.0
 
         if ltp <= 0:
             return
