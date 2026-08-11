@@ -16,8 +16,8 @@
       "iv_at_entry": 0.1602443065031099,
       "entry_premium": 15.0,
       "surge_baseline_premium": 15.0,
-      "current_premium": 15.0,
-      "current_delta": 0.13240406745246158,
+      "current_premium": 2.3,
+      "current_delta": 0.03194561523848113,
       "entry_time": "2026-08-10 10:38:15",
       "symbol_token": "41029",
       "trading_symbol": "NIFTY11AUG2624850CE",
@@ -26,7 +26,7 @@
       "exit_premium": 0.0,
       "exit_time": "",
       "pnl": 0.0,
-      "current_iv": 0.1602443065031099
+      "current_iv": 0.28642560882074464
     },
     {
       "id": "45ae90dd",
@@ -37,8 +37,8 @@
       "iv_at_entry": 0.16240090413131178,
       "entry_premium": 16.4,
       "surge_baseline_premium": 16.4,
-      "current_premium": 16.4,
-      "current_delta": 0.1398904341737574,
+      "current_premium": 16.85,
+      "current_delta": 0.18107819088558919,
       "entry_time": "2026-08-10 10:38:15",
       "symbol_token": "41006",
       "trading_symbol": "NIFTY11AUG2624350PE",
@@ -47,7 +47,7 @@
       "exit_premium": 0.0,
       "exit_time": "",
       "pnl": 0.0,
-      "current_iv": 0.16240090413131178
+      "current_iv": 0.26465153779348405
     },
     {
       "id": "5f19b4dc",
@@ -58,8 +58,8 @@
       "iv_at_entry": 0.16906012452165392,
       "entry_premium": 4.6,
       "surge_baseline_premium": 4.6,
-      "current_premium": 4.6,
-      "current_delta": 0.04679604122985602,
+      "current_premium": 0.95,
+      "current_delta": 0.012546952365085469,
       "entry_time": "2026-08-10 10:38:15",
       "symbol_token": "41037",
       "trading_symbol": "NIFTY11AUG2625000CE",
@@ -68,7 +68,7 @@
       "exit_premium": 0.0,
       "exit_time": "",
       "pnl": 0.0,
-      "current_iv": 0.16906012452165392
+      "current_iv": 0.33879542983415645
     },
     {
       "id": "5bf98f66",
@@ -79,8 +79,8 @@
       "iv_at_entry": 0.17752846332025893,
       "entry_premium": 5.9,
       "surge_baseline_premium": 5.9,
-      "current_premium": 5.9,
-      "current_delta": 0.055237412959092444,
+      "current_premium": 3.1,
+      "current_delta": 0.04255140344834501,
       "entry_time": "2026-08-10 10:38:15",
       "symbol_token": "41000",
       "trading_symbol": "NIFTY11AUG2624200PE",
@@ -89,22 +89,22 @@
       "exit_premium": 0.0,
       "exit_time": "",
       "pnl": 0.0,
-      "current_iv": 0.17752846332025893
+      "current_iv": 0.2764289842697626
     }
   ],
   "adjustments": [],
-  "spot_price": 24550.0,
+  "spot_price": 24503.6,
   "trading_mode": "PAPER_TRADING",
   "is_paper_trading": true,
-  "net_delta": 0.0,
-  "net_gamma": 0.0,
-  "net_theta": 0.0,
-  "net_vega": 0.0,
+  "net_delta": 0.1191281245638485,
+  "net_gamma": -0.001273988605852399,
+  "net_theta": 68.66504679815152,
+  "net_vega": -1.3675737008350124,
   "deployed_margin": 65000.0,
   "total_realized_pnl": 0.0,
-  "total_unrealized_pnl": 0.0,
-  "total_pnl": 0.0,
-  "roi_pct": 0.0,
-  "max_short_surge_pct": 0.0,
+  "total_unrealized_pnl": 376.9999999999998,
+  "total_pnl": 376.9999999999998,
+  "roi_pct": 0.58,
+  "max_short_surge_pct": 2.74,
   "surge_trigger_pct": 50.0
 }
