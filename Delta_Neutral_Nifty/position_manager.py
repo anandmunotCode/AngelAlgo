@@ -51,9 +51,15 @@ class PositionManager:
                 self.position = self._empty_position()
 
     def save(self):
-        """Save position to disk."""
-        with open(self.position_file, "w", encoding="utf-8") as f:
-            json.dump(self.position, f, indent=2, default=str)
+        """Atomic save position to disk to prevent partial/corrupt reads from dashboard."""
+        tmp_file = f"{self.position_file}.tmp"
+        try:
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(self.position, f, indent=2, default=str)
+            os.replace(tmp_file, self.position_file)
+        except Exception:
+            with open(self.position_file, "w", encoding="utf-8") as f:
+                json.dump(self.position, f, indent=2, default=str)
 
     # ─── LEG MANAGEMENT ──────────────────────────────────────────
 

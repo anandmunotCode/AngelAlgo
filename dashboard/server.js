@@ -41,14 +41,18 @@ function readPositionData() {
         if (stats.mtimeMs !== lastMtime || !cachedPosition) {
           const raw = fs.readFileSync(filePath, 'utf-8');
           if (raw && raw.trim()) {
-            cachedPosition = JSON.parse(raw);
-            lastMtime = stats.mtimeMs;
+            try {
+              cachedPosition = JSON.parse(raw);
+              lastMtime = stats.mtimeMs;
+            } catch (parseErr) {
+              // File is being written concurrently, retain cached state until write finishes
+            }
           }
         }
         return cachedPosition;
       }
     } catch (err) {
-      console.error(`Error reading position file ${filePath}:`, err.message);
+      // In-flight read error, fallback to cache
     }
   }
   return cachedPosition;
