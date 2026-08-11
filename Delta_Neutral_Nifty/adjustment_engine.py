@@ -81,72 +81,29 @@ class AdjustmentEngine:
         self.pm.update_leg_premium(short_pe["id"], short_pe["current_premium"],
                                    pe_greeks["raw_delta"])
 
-        # ─── TRIGGER EVALUATION ──────────────────────────────────
-
+        # ─── 50% LOSING SHORT LEG SURGE TRIGGER EVALUATION ────────────────
         trigger = None
         profitable_side = None
 
-        # Trigger 1: Losing Leg Premium Surge >= 50% from entry (e.g., 100 -> 150)
-        ce_surge = (short_ce["current_premium"] - short_ce["entry_premium"]) / max(short_ce["entry_premium"], 0.01)
-        pe_surge = (short_pe["current_premium"] - short_pe["entry_premium"]) / max(short_pe["entry_premium"], 0.01)
+        # Each short leg evaluates surge against its surge_baseline_premium (fallback to entry_premium)
+        ce_baseline = short_ce.get("surge_baseline_premium", short_ce["entry_premium"])
+        pe_baseline = short_pe.get("surge_baseline_premium", short_pe["entry_premium"])
+
+        ce_surge = (short_ce["current_premium"] - ce_baseline) / max(ce_baseline, 0.01)
+        pe_surge = (short_pe["current_premium"] - pe_baseline) / max(pe_baseline, 0.01)
 
         if ce_surge >= config.LOSING_PREMIUM_SURGE_PCT:
-            profitable_side = "PE"  # CE is losing (surged), PE is profitable
+            profitable_side = "PE"  # CE is losing (surged >= 50%), PE is profitable
             trigger = (
                 f"PREMIUM_SURGE: CE surged {ce_surge*100:.1f}% >= {config.LOSING_PREMIUM_SURGE_PCT*100:.0f}% "
-                f"(Entry: {short_ce['entry_premium']:.2f} -> Live: {short_ce['current_premium']:.2f})"
+                f"(Baseline: {ce_baseline:.2f} -> Live: {short_ce['current_premium']:.2f})"
             )
         elif pe_surge >= config.LOSING_PREMIUM_SURGE_PCT:
-            profitable_side = "CE"  # PE is losing (surged), CE is profitable
+            profitable_side = "CE"  # PE is losing (surged >= 50%), CE is profitable
             trigger = (
                 f"PREMIUM_SURGE: PE surged {pe_surge*100:.1f}% >= {config.LOSING_PREMIUM_SURGE_PCT*100:.0f}% "
-                f"(Entry: {short_pe['entry_premium']:.2f} -> Live: {short_pe['current_premium']:.2f})"
+                f"(Baseline: {pe_baseline:.2f} -> Live: {short_pe['current_premium']:.2f})"
             )
-
-        # Trigger 2: Premium capture on winning leg (50%+ profit captured)
-        if trigger is None:
-            ce_capture = 1.0 - (short_ce["current_premium"] / max(short_ce["entry_premium"], 0.01))
-            pe_capture = 1.0 - (short_pe["current_premium"] / max(short_pe["entry_premium"], 0.01))
-
-            if ce_capture >= config.PREMIUM_CAPTURE_PCT:
-                profitable_side = "CE"
-                trigger = f"PREMIUM_CAPTURE: CE captured {ce_capture*100:.0f}% profit"
-            elif pe_capture >= config.PREMIUM_CAPTURE_PCT:
-                profitable_side = "PE"
-                trigger = f"PREMIUM_CAPTURE: PE captured {pe_capture*100:.0f}% profit"
-
-        # Trigger 3: Portfolio delta breach
-        if trigger is None and abs(net_delta) > config.PORTFOLIO_DELTA_BREACH:
-            if net_delta > 0:
-                profitable_side = "PE"
-                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} > +{config.PORTFOLIO_DELTA_BREACH}"
-            else:
-                profitable_side = "CE"
-                trigger = f"DELTA_BREACH: Net Δ={net_delta:+.4f} < -{config.PORTFOLIO_DELTA_BREACH}"
-
-        # Trigger 4: Losing leg delta threshold
-        if trigger is None:
-            ce_abs_delta = abs(ce_greeks["raw_delta"])
-            pe_abs_delta = abs(pe_greeks["raw_delta"])
-
-            if ce_abs_delta >= config.LOSING_LEG_DELTA_THRESHOLD:
-                profitable_side = "PE"  # CE is losing (high delta), PE is profitable
-                trigger = f"DELTA_THRESHOLD: CE |Δ|={ce_abs_delta:.4f} > {config.LOSING_LEG_DELTA_THRESHOLD}"
-            elif pe_abs_delta >= config.LOSING_LEG_DELTA_THRESHOLD:
-                profitable_side = "CE"  # PE is losing (high delta), CE is profitable
-                trigger = f"DELTA_THRESHOLD: PE |Δ|={pe_abs_delta:.4f} > {config.LOSING_LEG_DELTA_THRESHOLD}"
-
-        # Trigger 5: Gamma danger
-        if trigger is None:
-            ce_gamma = abs(ce_greeks.get("gamma", 0))
-            pe_gamma = abs(pe_greeks.get("gamma", 0))
-
-            if ce_gamma > config.GAMMA_DANGER_THRESHOLD:
-                profitable_side = "PE"
-                trigger = f"GAMMA_DANGER: CE γ={ce_gamma:.5f} > {config.GAMMA_DANGER_THRESHOLD}"
-            elif pe_gamma > config.GAMMA_DANGER_THRESHOLD:
-                profitable_side = "CE"
-                trigger = f"GAMMA_DANGER: PE γ={pe_gamma:.5f} > {config.GAMMA_DANGER_THRESHOLD}"
 
         if trigger is None:
             return None
@@ -299,6 +256,15 @@ class AdjustmentEngine:
             symbol_token=hedge_token,
             trading_symbol=hedge_symbol,
             is_hedge=True,
+        )
+
+        # Step 7: Reset losing short leg's surge baseline to its CURRENT price
+        # The next adjustment will ONLY trigger if it expands ANOTHER 50% from this new level!
+        self.pm.update_surge_baseline(losing_leg["id"], losing_leg["current_premium"])
+        logger.info(
+            f"  [SURGE BASELINE RESET] Losing leg {losing_leg['strike']} {losing_leg['option_type']} "
+            f"surge baseline updated to {losing_leg['current_premium']:.2f} "
+            f"(Next surge trigger >= {losing_leg['current_premium'] * (1 + config.LOSING_PREMIUM_SURGE_PCT):.2f})"
         )
 
         # Record adjustment

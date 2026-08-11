@@ -71,6 +71,7 @@ class PositionManager:
             "delta_at_entry": float(delta_at_entry),
             "iv_at_entry": float(iv_at_entry),
             "entry_premium": float(entry_premium),
+            "surge_baseline_premium": float(entry_premium),
             "current_premium": float(entry_premium),
             "current_delta": float(delta_at_entry),
             "entry_time": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
@@ -96,6 +97,14 @@ class PositionManager:
         )
         self.save()
         return leg["id"]
+
+    def update_surge_baseline(self, leg_id, new_baseline):
+        """Update baseline reference premium for 50% surge calculation after an adjustment."""
+        for leg in self.position["legs"]:
+            if leg["id"] == leg_id and leg["status"] == "OPEN":
+                leg["surge_baseline_premium"] = float(new_baseline)
+                self.save()
+                return
 
     def close_leg(self, leg_id, exit_premium, reason=""):
         """Close a specific leg and calculate P&L."""
@@ -130,6 +139,8 @@ class PositionManager:
         for leg in self.position["legs"]:
             if leg["id"] == leg_id and leg["status"] == "OPEN":
                 leg["current_premium"] = float(current_premium)
+                if "surge_baseline_premium" not in leg:
+                    leg["surge_baseline_premium"] = float(leg.get("entry_premium", current_premium))
                 if current_delta is not None:
                     leg["current_delta"] = float(current_delta)
                 return
@@ -168,10 +179,10 @@ class PositionManager:
         # Check maximum short leg surge % towards the 50% trigger
         max_surge_pct = 0.0
         for leg in self.open_short_legs:
-            entry_p = leg.get("entry_premium", 0.0)
-            curr_p = leg.get("current_premium", entry_p)
-            if entry_p > 0:
-                surge = (curr_p - entry_p) / entry_p
+            baseline_p = leg.get("surge_baseline_premium", leg.get("entry_premium", 0.0))
+            curr_p = leg.get("current_premium", baseline_p)
+            if baseline_p > 0:
+                surge = (curr_p - baseline_p) / baseline_p
                 if surge > max_surge_pct:
                     max_surge_pct = surge
         self.position["max_short_surge_pct"] = round(max_surge_pct * 100.0, 2)
