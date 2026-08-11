@@ -16,17 +16,11 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const POSITION_FILE_PATHS = [
-  path.join(__dirname, '..', 'positions.json'),
-  path.join(__dirname, '..', 'position.json'),
-  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'position.json'),
-  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'positions.json')
+  path.join(__dirname, '..', 'positions.json')
 ];
 
 const TRADE_LOG_PATHS = [
-  path.join(__dirname, '..', 'trade_log.csv'),
-  path.join(__dirname, '..', 'paper_trades_log.csv'),
-  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'trade_log.csv'),
-  path.join(__dirname, '..', 'Delta_Neutral_Nifty', 'data', 'paper_trades_log.csv')
+  path.join(__dirname, '..', 'trade_log.csv')
 ];
 
 let cachedPosition = null;

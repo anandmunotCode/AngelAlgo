@@ -46,15 +46,14 @@ class StrategyRunner:
 
     def start(self):
         """Main entry point."""
-        mode_str = "PAPER TRADING" if self.paper_mode else "LIVE TRADING"
+        mode_str = "PAPER TRADING (SIMULATION)" if self.paper_mode else "LIVE TRADING"
         print_banner(f"DELTA NEUTRAL NIFTY - {mode_str}")
+        print(f"  Cycle: Starts Wednesday 09:18 IST -> Runs through Expiry")
         print(f"  Lot Size: {config.LOT_SIZE} x {config.NUM_LOTS} lot(s)")
-        print(f"  Entry Delta: +/-{config.ENTRY_DELTA} | Hedge Delta: +/-{config.HEDGE_DELTA}")
-        print(f"  Data Source: WebSocket V2 (real-time ALL strikes)")
-        print(f"  Adjustment Triggers: NetDelta>{config.PORTFOLIO_DELTA_BREACH}, "
-              f"PremCapture>{config.PREMIUM_CAPTURE_PCT*100:.0f}%, "
-              f"LosingDelta>{config.LOSING_LEG_DELTA_THRESHOLD}, "
-              f"Gamma>{config.GAMMA_DANGER_THRESHOLD}")
+        print(f"  Entry: 0.15 Delta Short Strangle + 0.05 Delta Long Hedges")
+        print(f"  Adjustment Trigger: 50% Short Premium Surge (Losing Leg >= {config.LOSING_PREMIUM_SURGE_PCT*100:.0f}% from Baseline)")
+        print(f"  Straddle Risk Controls: 2% Dynamic Capital SL | 70% Combined Theta Decay Target")
+        print(f"  Data Source: WebSocket V2 (real-time streaming)")
 
         # Login
         self.api.login()
@@ -173,9 +172,16 @@ class StrategyRunner:
                     self.ws_feeder.update_spot(spot)
                     self.ws_feeder.update_time_to_expiry(T)
 
-                # Phase 1: Initial entry if no open short legs
+                # Phase 1: Initial entry if no open short legs (Starts Wednesday 09:18 IST)
                 if not self.pm.open_short_legs:
-                    self._execute_initial_entry(spot, T)
+                    if now.date().weekday() == config.CYCLE_START_DAY:
+                        if is_entry_window(now):
+                            self._execute_initial_entry(spot, T)
+                        else:
+                            logger.debug(f"Waiting for 09:18 IST entry window (current: {now.strftime('%H:%M:%S')})...")
+                    else:
+                        logger.info(f"No open positions. Waiting for Wednesday 09:18 IST to initiate new weekly cycle. Today: {now.strftime('%A')}")
+                        time.sleep(30)
 
                 # Phase 2: Monitor and adjust
                 if self.pm.open_short_legs:
@@ -338,6 +344,14 @@ class StrategyRunner:
 
         # Print status every refresh
         self._print_live_status(spot, T, portfolio)
+
+        # ─── EXPIRY DAY AUTO-SQUAREOFF (15:15 IST) ────────────────
+        if is_expiry_day(now.date()) or (self.expiry_date and now.date() >= self.expiry_date):
+            if now.hour == 15 and now.minute >= 15:
+                print_banner("EXPIRY DAY AUTO-SQUAREOFF (15:15 IST)")
+                logger.info(f"Expiry day ({self.expiry_date}) market auto-squareoff reached at 15:15 IST. Closing all positions.")
+                self.pm.close_all(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
+                return
 
         # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
         if self.pm.is_straddle:

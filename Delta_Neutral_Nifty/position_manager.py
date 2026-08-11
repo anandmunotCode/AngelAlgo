@@ -44,6 +44,11 @@ class PositionManager:
             try:
                 with open(self.position_file, "r", encoding="utf-8") as f:
                     self.position = json.load(f)
+                # Ensure all standard schema keys exist
+                defaults = self._empty_position()
+                for k, v in defaults.items():
+                    if k not in self.position:
+                        self.position[k] = v
                 logger.info(f"Loaded position: {self.position['status']} | "
                             f"{len(self.open_legs)} open legs")
             except (json.JSONDecodeError, KeyError):
@@ -74,6 +79,7 @@ class PositionManager:
             "leg_type": leg_type,
             "strike": float(strike),
             "option_type": option_type,
+            "quantity": config.LOT_SIZE * config.NUM_LOTS,
             "delta_at_entry": float(delta_at_entry),
             "iv_at_entry": float(iv_at_entry),
             "entry_premium": float(entry_premium),
@@ -167,10 +173,24 @@ class PositionManager:
             else config.DEFAULT_MARGIN_PER_LOT_IC * config.NUM_LOTS
         )
         self.position["deployed_margin"] = float(margin)
+        self.position["lot_size"] = config.LOT_SIZE * config.NUM_LOTS
+        self.position["is_straddle"] = bool(self.is_straddle)
         self.position["total_realized_pnl"] = float(self.total_realized_pnl)
         self.position["total_unrealized_pnl"] = float(self.total_unrealized_pnl)
         self.position["total_pnl"] = float(self.total_pnl)
         self.position["roi_pct"] = round((self.total_pnl / margin * 100.0) if margin > 0 else 0.0, 2)
+
+        # Update open legs live PnL & quantities for accurate matrix rendering
+        for leg in self.position["legs"]:
+            if leg.get("status") == "OPEN":
+                entry_p = float(leg.get("entry_premium", 0.0))
+                curr_p = float(leg.get("current_premium", entry_p))
+                qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
+                leg["quantity"] = qty
+                if leg.get("is_hedge"):
+                    leg["pnl"] = round((curr_p - entry_p) * qty, 2)
+                else:
+                    leg["pnl"] = round((entry_p - curr_p) * qty, 2)
 
         # Update individual leg deltas & surge progress
         for leg_info in portfolio.get("leg_greeks", []):

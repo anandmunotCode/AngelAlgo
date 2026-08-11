@@ -10,7 +10,8 @@ Tuned to institutional-grade (Jane Street-inspired) standards.
 LOT_SIZE = 65                      # Shares per lot
 NUM_LOTS = 1                       # Lots per entry
 STRIKE_GAP = 50                    # Nifty options strike interval
-WEEKLY_EXPIRY_DAY = 3              # Thursday (Mon=0, Thu=3)
+CYCLE_START_DAY = 2                # Wednesday (Cycle entry at 09:18 IST)
+WEEKLY_EXPIRY_DAY = 1              # Tuesday (Weekly expiry at 15:15 IST)
 
 # Nifty Spot Token (Angel One)
 NIFTY_SPOT_TOKEN = "99926000"
@@ -39,12 +40,8 @@ HEDGE_DELTA = 0.05                     # Protective wings (buy at this delta / n
 # ═══════════════════════════════════════════════════════════════
 # DYNAMIC ADJUSTMENT TRIGGERS (ACTIVE IN NON-STRADDLE PHASE)
 # ═══════════════════════════════════════════════════════════════
-# Primary Trigger: Losing leg premium surges by >= 50% from entry (e.g. 100 -> 150)
-LOSING_PREMIUM_SURGE_PCT = 0.50        # 50% expansion on losing leg
-PREMIUM_CAPTURE_PCT = 0.50             # Profitable leg captured 50%+ profit
-PORTFOLIO_DELTA_BREACH = 0.10          # |Net Delta| > 0.10 rebalance
-LOSING_LEG_DELTA_THRESHOLD = 0.30      # Losing leg |delta| > 0.30
-GAMMA_DANGER_THRESHOLD = 0.015         # High gamma risk trigger
+# Single Institutional Trigger: Losing short leg premium surges by >= 50% from baseline
+LOSING_PREMIUM_SURGE_PCT = 0.50        # 50% expansion on losing short leg from baseline
 
 # Straddle Convergence Setting
 STRADDLE_PROXIMITY_PTS = 0             # 0 = exact same strike required (Call Strike == Put Strike)
@@ -88,7 +85,6 @@ DIVIDEND_YIELD = 0.012             # Nifty approximate dividend yield (~1.2%)
 # ═══════════════════════════════════════════════════════════════
 POSITION_FILE = "positions.json"
 TRADE_LOG_FILE = "trade_log.csv"
-PAPER_TRADES_FILE = "paper_trades_log.csv"
 INSTRUMENT_MASTER_CACHE = "instrument_master.json"
 LOG_DIR = "logs"
 

@@ -187,7 +187,7 @@ function renderTerminalState(pos, trades) {
   }
 
   // 6. Straddle Phase vs Iron Condor Phase
-  const isStraddle = Boolean(pos.is_straddle);
+  const isStraddle = Boolean(pos.is_straddle || pos.is_straddle_reached);
   if (isStraddle) {
     elements.straddlePhaseBadge.textContent = 'PHASE: STRADDLE (RISK LOCK)';
     elements.straddlePhaseBadge.className = 'straddle-state-badge straddle-active';
@@ -215,17 +215,19 @@ function renderTerminalState(pos, trades) {
   const openLegs = legs.filter(l => l.status === 'OPEN');
   elements.activeLegsCount.textContent = `${openLegs.length} ACTIVE LEGS`;
 
-  let maxSurgePct = 0.0;
-  openLegs.filter(l => !l.is_hedge).forEach(shortLeg => {
-    const entry = parseFloat(shortLeg.entry_premium || 0.0);
-    const curr = parseFloat(shortLeg.current_premium || entry);
-    if (entry > 0) {
-      const surge = ((curr - entry) / entry) * 100.0;
-      if (surge > maxSurgePct) {
-        maxSurgePct = surge;
+  let maxSurgePct = typeof pos.max_short_surge_pct === 'number' ? pos.max_short_surge_pct : 0.0;
+  if (!pos.max_short_surge_pct && openLegs.length > 0) {
+    openLegs.filter(l => !l.is_hedge).forEach(shortLeg => {
+      const baseline = parseFloat(shortLeg.surge_baseline_premium || shortLeg.entry_premium || 0.0);
+      const curr = parseFloat(shortLeg.current_premium || baseline);
+      if (baseline > 0) {
+        const surge = ((curr - baseline) / baseline) * 100.0;
+        if (surge > maxSurgePct) {
+          maxSurgePct = surge;
+        }
       }
-    }
-  });
+    });
+  }
 
   elements.maxSurgeVal.textContent = `${maxSurgePct.toFixed(1)}%`;
   const gaugeFillPct = Math.min((maxSurgePct / 50.0) * 100.0, 100);
@@ -243,13 +245,13 @@ function renderTerminalState(pos, trades) {
   }
 
   // 8. Render Active 4-Leg Position Matrix Table
-  renderMatrixTable(openLegs);
+  renderMatrixTable(openLegs, pos);
 
   // 9. Render Adjustment History & Execution Logs
   renderAdjustmentsAndLogs(legs, trades);
 }
 
-function renderMatrixTable(openLegs) {
+function renderMatrixTable(openLegs, pos = {}) {
   if (!openLegs || openLegs.length === 0) {
     elements.matrixTableBody.innerHTML = `
       <tr>
@@ -261,20 +263,24 @@ function renderMatrixTable(openLegs) {
     return;
   }
 
+  const defaultQty = parseInt(pos.lot_size || 65);
   let html = '';
   openLegs.forEach(leg => {
     const isHedge = Boolean(leg.is_hedge);
     const optType = (leg.option_type || 'CE').toUpperCase();
     const strike = leg.strike || '--';
     const entryPrice = parseFloat(leg.entry_premium || 0.0);
+    const baselinePrice = parseFloat(leg.surge_baseline_premium || entryPrice);
     const ltp = parseFloat(leg.current_premium || entryPrice);
-    const qty = parseInt(leg.quantity || 65);
+    const qty = parseInt(leg.quantity || defaultQty);
     const delta = parseFloat(leg.current_delta || 0.0);
     const iv = parseFloat(leg.current_iv || 0.0);
 
     // Calculate Leg P&L
     let legPnl = 0.0;
-    if (isHedge) {
+    if (typeof leg.pnl === 'number' && leg.pnl !== 0) {
+      legPnl = leg.pnl;
+    } else if (isHedge) {
       legPnl = (ltp - entryPrice) * qty; // Long Hedge
     } else {
       legPnl = (entryPrice - ltp) * qty; // Short Leg
@@ -285,7 +291,7 @@ function renderMatrixTable(openLegs) {
     let surgeText = '-';
     let surgeClass = 'surge-pill safe';
     if (!isHedge) {
-      const surge = entryPrice > 0 ? ((ltp - entryPrice) / entryPrice * 100.0) : 0.0;
+      const surge = baselinePrice > 0 ? ((ltp - baselinePrice) / baselinePrice * 100.0) : 0.0;
       if (surge > 0) {
         surgeText = `+${surge.toFixed(1)}% / 50%`;
         if (surge >= 50.0) surgeClass = 'surge-pill critical';

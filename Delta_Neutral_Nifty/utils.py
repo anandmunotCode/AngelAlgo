@@ -88,16 +88,16 @@ def is_entry_window(dt=None):
 
 def get_next_weekly_expiry(from_date=None):
     """
-    Calculate the next Nifty weekly expiry date (Thursday).
-    If today IS Thursday and market is still open, today is the expiry.
-    If today is after Thursday, next week's Thursday.
+    Calculate the next Nifty weekly expiry date (Tuesday).
+    If today IS Tuesday and market is still open, today is the expiry.
+    If today is after Tuesday, next week's Tuesday.
     """
     if from_date is None:
         from_date = now_ist().date()
     elif isinstance(from_date, datetime):
         from_date = from_date.date()
 
-    weekday = from_date.weekday()  # Mon=0, Thu=3
+    weekday = from_date.weekday()
     expiry_day = config.WEEKLY_EXPIRY_DAY
 
     if weekday <= expiry_day:
@@ -112,7 +112,7 @@ def get_next_weekly_expiry(from_date=None):
 def get_current_expiry(from_date=None):
     """
     Get the expiry date for the current trading week.
-    Mon-Thu -> this Thursday. Fri-Sun -> next Thursday.
+    Mon-Tue -> this Tuesday. Wed-Sun -> next Tuesday.
     """
     if from_date is None:
         from_date = now_ist().date()
@@ -121,13 +121,13 @@ def get_current_expiry(from_date=None):
 
     weekday = from_date.weekday()
 
-    # If it's Friday(4), Saturday(5), or Sunday(6) -> next week's Thursday
+    # If it's Wednesday through Sunday -> next week's Tuesday
     if weekday > config.WEEKLY_EXPIRY_DAY:
         return get_next_weekly_expiry(from_date)
 
-    # Mon(0) to Thu(3) -> this Thursday
-    days_to_thu = config.WEEKLY_EXPIRY_DAY - weekday
-    return from_date + timedelta(days=days_to_thu)
+    # Monday or Tuesday -> this Tuesday
+    days_to_expiry = config.WEEKLY_EXPIRY_DAY - weekday
+    return from_date + timedelta(days=days_to_expiry)
 
 
 def is_expiry_day(check_date=None):

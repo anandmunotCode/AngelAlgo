@@ -1,22 +1,17 @@
 """
 Delta Neutral Nifty - Adjustment Engine
-Jane Street-inspired multi-factor adjustment logic.
+Institutional 50% Short Premium Surge Adjustment Logic.
 
-TRIGGERS (any ONE fires → evaluate adjustment):
-  1. Portfolio Net Delta breaches ±0.10
-  2. Profitable leg captures ≥75% of max profit (premium → 25% of entry)
-  3. Losing leg |delta| crosses 0.30 (approaching ATM danger)
-  4. Gamma of any sold leg > 0.015 (extreme gamma risk)
+ADJUSTMENT TRIGGER:
+  Losing short leg surges by >= 50% from its baseline premium.
+  (Surge % = (Live - Baseline) / Baseline * 100 >= 50%)
 
 ADJUSTMENT ACTION:
-  1. Close the PROFITABLE leg (book profit)
-  2. Close its paired hedge
-  3. Sell NEW 0.15-delta option on the SAME SIDE as the closed profitable leg
-  4. Buy NEW 0.05-delta hedge for the new short leg
-  5. Check if this creates a Straddle → if yes, STOP forever
-
-STRADDLE STOP:
-  Once both short strikes are on the SAME strike, NO further adjustments.
+  1. Close the PROFITABLE short leg + its paired hedge (book profit).
+  2. Enter NEW short leg on the profitable side matching the losing short leg's absolute delta.
+  3. Enter NEW hedge leg on the profitable side matching the losing hedge leg's current delta.
+  4. Reset the losing short leg's surge baseline to its CURRENT market price.
+  5. Check if Call Strike == Put Strike (Straddle Convergence) → Lock adjustments forever.
 """
 from . import config
 from .utils import setup_logger, format_pnl, format_delta
@@ -183,8 +178,12 @@ class AdjustmentEngine:
             logger.error("Could not find suitable strike for new short leg!")
             return False
 
-        # Step 4: Find new hedge strike at 0.05 delta (config.HEDGE_DELTA) per Strategy Blueprint
-        target_hedge_delta = config.HEDGE_DELTA
+        # Step 4: Find new hedge strike matching the LOSING HEDGE'S CURRENT DELTA (Dynamic Symmetrical Wing)
+        losing_hedge = action.get("losing_hedge")
+        if losing_hedge and losing_hedge.get("current_delta"):
+            target_hedge_delta = abs(float(losing_hedge.get("current_delta")))
+        else:
+            target_hedge_delta = config.HEDGE_DELTA
 
         new_hedge_strike, new_hedge_delta, new_hedge_iv, new_hedge_premium = \
             greeks_engine.find_strike_at_delta(
