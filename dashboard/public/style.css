@@ -807,6 +807,74 @@ body {
 }
 
 /* ═════════════════════════════════════════════════════════════════
+   CLOUD SYNC PILL
+   ═════════════════════════════════════════════════════════════════ */
+.sync-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 30px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--purple-hedge);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  transition: all 0.2s ease;
+}
+
+.sync-pill.syncing {
+  border-color: rgba(245, 158, 11, 0.5);
+  color: var(--amber-warn);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.sync-pill.synced {
+  border-color: rgba(16, 185, 129, 0.4);
+  color: var(--green-profit);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.sync-pill.sync-error {
+  border-color: rgba(244, 63, 94, 0.4);
+  color: var(--red-loss);
+  background: rgba(244, 63, 94, 0.1);
+}
+
+.sync-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.sync-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: rotate(90deg);
+}
+
+.sync-btn.spinning {
+  animation: syncSpin 0.8s linear infinite;
+}
+
+@keyframes syncSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ═════════════════════════════════════════════════════════════════
    RESPONSIVENESS (BREAKPOINTS)
    ═════════════════════════════════════════════════════════════════ */
 @media (max-width: 1200px) {

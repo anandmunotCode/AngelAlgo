@@ -1,11 +1,11 @@
 {
-  "expiry_date": "",
-  "initial_entry_time": "",
+  "expiry_date": "2026-08-18",
+  "initial_entry_time": "2026-08-12 09:40:46",
   "is_straddle_reached": false,
   "adjustment_count": 0,
   "total_premium_collected": 0.0,
   "total_premium_paid": 0.0,
-  "status": "INACTIVE",
+  "status": "ACTIVE",
   "legs": [],
   "adjustments": []
 }

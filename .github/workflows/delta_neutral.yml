@@ -16,7 +16,7 @@ permissions:
 jobs:
   run-delta-neutral:
     runs-on: ubuntu-latest
-    timeout-minutes: 420  # ~7 hours for full market session (09:00 to 15:35 IST)
+    timeout-minutes: 420  # ~7 hours for full market session (08:55 to 15:35 IST)
 
     steps:
     - name: Checkout Code
@@ -32,21 +32,48 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r Delta_Neutral_Nifty/requirements.txt
 
-    - name: Run Delta Neutral Paper Trading
+    - name: Configure Git for Live Sync
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Run Engine with Live Dashboard Sync
       env:
         ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
         ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
         ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
         ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
       run: |
-        python -m Delta_Neutral_Nifty
+        # Start the trading engine in the background
+        python -m Delta_Neutral_Nifty &
+        ENGINE_PID=$!
 
-    - name: Commit & Push Trade Logs
+        # Live sync loop: push positions.json to GitHub every 5 minutes
+        # so the local dashboard can git pull and display live data
+        while kill -0 $ENGINE_PID 2>/dev/null; do
+          sleep 300  # Wait 5 minutes
+
+          # Only push if engine is still running and files changed
+          if kill -0 $ENGINE_PID 2>/dev/null; then
+            git add positions.json trade_log.csv 2>/dev/null || true
+            git add paper_trades_log.csv logs/ 2>/dev/null || true
+            if ! git diff --cached --quiet 2>/dev/null; then
+              git commit -m "Live sync: $(TZ=Asia/Kolkata date '+%H:%M IST') [skip ci]" 2>/dev/null || true
+              git pull --rebase 2>/dev/null || true
+              git push 2>/dev/null || true
+              echo "[SYNC] Pushed positions.json to GitHub at $(TZ=Asia/Kolkata date '+%H:%M:%S IST')"
+            fi
+          fi
+        done
+
+        # Wait for engine to finish cleanly
+        wait $ENGINE_PID || true
+
+    - name: Final Commit & Push Trade Logs
       if: always()
       run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add positions.json trade_log.csv || true
         git add paper_trades_log.csv logs/ 2>/dev/null || true
-        git commit -m "Auto-update delta neutral paper trading results [skip ci]" || exit 0
+        git commit -m "Market close: final state $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M IST') [skip ci]" || exit 0
+        git pull --rebase 2>/dev/null || true
         git push

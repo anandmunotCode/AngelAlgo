@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const { execSync } = require('child_process');
 
 const app = express();
 const server = http.createServer(app);
@@ -112,6 +113,45 @@ io.on('connection', (socket) => {
   socket.emit('update', getPayload());
 });
 
+// ─── CLOUD SYNC: Auto-pull from GitHub every 5 minutes ─────────────
+const REPO_ROOT = path.join(__dirname, '..');
+let lastSyncTime = null;
+let syncStatus = 'idle';
+
+function syncFromCloud() {
+  try {
+    syncStatus = 'syncing';
+    execSync('git pull --rebase 2>/dev/null || git pull', {
+      cwd: REPO_ROOT,
+      timeout: 15000,
+      stdio: 'pipe'
+    });
+    lastSyncTime = new Date().toISOString();
+    syncStatus = 'ok';
+    console.log(`[CLOUD SYNC] Pulled latest from GitHub at ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`);
+  } catch (err) {
+    syncStatus = 'error';
+    console.error(`[CLOUD SYNC] Git pull failed: ${err.message}`);
+  }
+}
+
+// Auto-sync every 5 minutes (matches workflow push interval)
+setInterval(syncFromCloud, 5 * 60 * 1000);
+
+// Initial sync on dashboard startup
+syncFromCloud();
+
+// Manual sync endpoint (click "Sync Now" button on dashboard)
+app.post('/api/sync', (req, res) => {
+  syncFromCloud();
+  res.json({ status: syncStatus, lastSync: lastSyncTime });
+});
+
+app.get('/api/sync-status', (req, res) => {
+  res.json({ status: syncStatus, lastSync: lastSyncTime });
+});
+
+// WebSocket real-time broadcast loop (500ms interval for ultra-smooth responsiveness)
 setInterval(() => {
   io.emit('update', getPayload());
 }, 500);

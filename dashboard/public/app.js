@@ -392,3 +392,49 @@ function renderAdjustmentsAndLogs(allLegs, trades) {
     elements.auditLogsBox.innerHTML = logHtml;
   }
 }
+
+// ─── CLOUD SYNC FUNCTIONS ─────────────────────────────────────
+function triggerSync() {
+  const btn = document.getElementById('syncBtn');
+  const pill = document.getElementById('syncPill');
+  const text = document.getElementById('syncText');
+
+  btn.classList.add('spinning');
+  pill.className = 'sync-pill syncing';
+  text.textContent = 'SYNCING...';
+
+  fetch('/api/sync', { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+      btn.classList.remove('spinning');
+      if (data.status === 'ok') {
+        pill.className = 'sync-pill synced';
+        const syncTime = new Date(data.lastSync).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+        text.textContent = `SYNCED ${syncTime}`;
+      } else {
+        pill.className = 'sync-pill sync-error';
+        text.textContent = 'SYNC ERROR';
+      }
+    })
+    .catch(() => {
+      btn.classList.remove('spinning');
+      pill.className = 'sync-pill sync-error';
+      text.textContent = 'SYNC FAILED';
+    });
+}
+
+// Auto-check sync status every 30 seconds
+setInterval(() => {
+  fetch('/api/sync-status')
+    .then(res => res.json())
+    .then(data => {
+      const pill = document.getElementById('syncPill');
+      const text = document.getElementById('syncText');
+      if (data.lastSync) {
+        const syncTime = new Date(data.lastSync).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+        pill.className = 'sync-pill synced';
+        text.textContent = `SYNCED ${syncTime}`;
+      }
+    })
+    .catch(() => {});
+}, 30000);
