@@ -48,21 +48,27 @@ jobs:
         python -m Delta_Neutral_Nifty &
         ENGINE_PID=$!
 
-        # Live sync loop: push positions.json to GitHub every 5 minutes
-        # so the local dashboard can git pull and display live data
+        # Live sync loop: push positions.json and trade_log.csv to the live-data branch every 30 seconds
         while kill -0 $ENGINE_PID 2>/dev/null; do
-          sleep 300  # Wait 5 minutes
+          sleep 30
 
-          # Only push if engine is still running and files changed
           if kill -0 $ENGINE_PID 2>/dev/null; then
-            git add positions.json trade_log.csv 2>/dev/null || true
-            git add paper_trades_log.csv logs/ 2>/dev/null || true
-            if ! git diff --cached --quiet 2>/dev/null; then
-              git commit -m "Live sync: $(TZ=Asia/Kolkata date '+%H:%M IST') [skip ci]" 2>/dev/null || true
-              git pull --rebase 2>/dev/null || true
-              git push 2>/dev/null || true
-              echo "[SYNC] Pushed positions.json to GitHub at $(TZ=Asia/Kolkata date '+%H:%M:%S IST')"
-            fi
+            # Use a isolated temporary folder to avoid workspace branch switching
+            rm -rf /tmp/live-sync 2>/dev/null || true
+            mkdir -p /tmp/live-sync
+            cp positions.json /tmp/live-sync/ 2>/dev/null || true
+            cp trade_log.csv /tmp/live-sync/ 2>/dev/null || true
+
+            cd /tmp/live-sync
+            git init
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -b live-data 2>/dev/null || true
+            git add .
+            git commit -m "Live Sync Update" 2>/dev/null || true
+            git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            git push origin live-data --force 2>/dev/null || true
+            cd - >/dev/null
           fi
         done
 

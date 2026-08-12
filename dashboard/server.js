@@ -121,22 +121,48 @@ let syncStatus = 'idle';
 function syncFromCloud() {
   try {
     syncStatus = 'syncing';
-    execSync('git pull --rebase 2>/dev/null || git pull', {
-      cwd: REPO_ROOT,
-      timeout: 15000,
-      stdio: 'pipe'
-    });
+    try {
+      // Fetch the isolated live-data branch from GitHub
+      execSync('git fetch origin live-data:live-data --force', {
+        cwd: REPO_ROOT,
+        timeout: 15000,
+        stdio: 'pipe'
+      });
+      // Extract positions.json to local workspace
+      execSync('git show live-data:positions.json > positions.json', {
+        cwd: REPO_ROOT,
+        timeout: 5000,
+        stdio: 'pipe'
+      });
+      // Extract trade_log.csv if it exists in the branch
+      try {
+        execSync('git show live-data:trade_log.csv > trade_log.csv', {
+          cwd: REPO_ROOT,
+          timeout: 5000,
+          stdio: 'pipe'
+        });
+      } catch (err) {
+        // Skip if trade_log.csv doesn't exist in live-data branch yet
+      }
+    } catch (err) {
+      // Fallback: If live-data branch is not on remote yet, do a standard main branch pull
+      execSync('git pull --rebase 2>/dev/null || git pull', {
+        cwd: REPO_ROOT,
+        timeout: 15000,
+        stdio: 'pipe'
+      });
+    }
     lastSyncTime = new Date().toISOString();
     syncStatus = 'ok';
-    console.log(`[CLOUD SYNC] Pulled latest from GitHub at ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`);
+    console.log(`[CLOUD SYNC] Sync completed at ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST`);
   } catch (err) {
     syncStatus = 'error';
-    console.error(`[CLOUD SYNC] Git pull failed: ${err.message}`);
+    console.error(`[CLOUD SYNC] Sync failed: ${err.message}`);
   }
 }
 
-// Auto-sync every 5 minutes (matches workflow push interval)
-setInterval(syncFromCloud, 5 * 60 * 1000);
+// Auto-sync every 15 seconds (matches workflow's high-frequency loop)
+setInterval(syncFromCloud, 15 * 1000);
 
 // Initial sync on dashboard startup
 syncFromCloud();
