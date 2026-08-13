@@ -152,8 +152,9 @@ class StrategyRunner:
                     time.sleep(10)
                     continue
                 elif now.hour > config.MARKET_CLOSE_HOUR or (now.hour == config.MARKET_CLOSE_HOUR and now.minute >= config.MARKET_CLOSE_MINUTE):
-                    logger.info("[AUTO-STOP] Market closed at 15:30 IST. Exiting process to save GitHub minutes.")
-                    print_banner("MARKET CLOSED (15:30 IST) - ENGINE EXITING CLEANLY")
+                    close_time_str = f"{config.MARKET_CLOSE_HOUR:02d}:{config.MARKET_CLOSE_MINUTE:02d}"
+                    logger.info(f"[AUTO-STOP] Session close at {close_time_str} IST. Exiting process cleanly.")
+                    print_banner(f"SESSION CLOSED ({close_time_str} IST) - ENGINE EXITING CLEANLY")
                     break
 
             try:
