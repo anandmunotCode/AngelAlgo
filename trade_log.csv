@@ -1,1 +1,3 @@
 expiry,entry_time,exit_time,leg_type,option_type,strike,entry_premium,exit_premium,pnl_pts,pnl_inr,is_hedge,reason
+2026-08-18,2026-08-14 09:18:00,2026-08-14 13:46:02,SHORT_PUT,PE,24100.0,17.65,8.7,8.95,581.75,False,ADJ: PREMIUM_SURGE: CE surged 52.1% >= 50% (Baseline: 21.30 -> Live: 32.40)
+2026-08-18,2026-08-14 09:18:00,2026-08-14 13:46:02,LONG_PUT,PE,23900.0,4.65,3.4,-1.25,-81.25,True,ADJ_HEDGE: paired with 204610d3
