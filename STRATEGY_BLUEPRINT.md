@@ -7,6 +7,8 @@ The system enters on the configured cycle start day (default: Wednesday) at 09:1
 
 > **Note:** The entry day is controlled by `CYCLE_START_DAY` in `config.py` (Python weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri). Change this value to enter on a different day if a cycle was missed.
 
+> **Current Cycle:** `CYCLE_START_DAY = 4` (Friday). Revert to `2` (Wednesday) after the Tuesday 2026-08-18 expiry.
+
 ---
 
 ## 2. SYSTEM PARAMETERS
@@ -95,7 +97,10 @@ As adjustments happen, the profitable side rolls closer to the losing side. When
 
 ## 5. INFRASTRUCTURE: RELAY PATTERN (GitHub Actions)
 
-The Indian market day (09:15–15:41 IST = 6 hrs 26 min) exceeds GitHub Actions' 6-hour per-job limit. To solve this, the workflow uses a **Relay Pattern** — two sequential jobs within a single workflow file:
+The Indian market day (09:15–15:41 IST = 6 hrs 26 min) exceeds GitHub Actions' 6-hour per-job limit. To solve this, the workflow uses a **Relay Pattern** — two sequential jobs within a single workflow file.
+
+### Trigger:
+* **Manual only** (`workflow_dispatch`). No automatic cron schedule. The operator clicks "Run workflow" on GitHub Actions each trading day.
 
 | Session | Time (IST) | Duration | Environment Overrides |
 |---|---|---|---|
@@ -123,3 +128,4 @@ The Indian market day (09:15–15:41 IST = 6 hrs 26 min) exceeds GitHub Actions'
 * Real-time Data: Live prices are streamed via Angel One WebSocket V2 for sub-second updates, with REST API polling as an automatic fallback.
 * Decoupled UI: The monitoring dashboard runs as an independent process that reads `positions.json`, ensuring browser activity never affects trading execution.
 * GitHub Actions Minutes: The repository is set to **public** to get unlimited free GitHub Actions minutes (private repos are capped at 2000 min/month).
+* Order Audit Trail: Every order execution (initial entries, adjustment closes, new rolls) is logged to `trade_log.csv`. All 8 events per adjustment cycle are captured — not just exits.
