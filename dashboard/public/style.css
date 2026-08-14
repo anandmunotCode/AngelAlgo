@@ -765,6 +765,7 @@ body {
 .terminal-log-line.tag-adj { border-left-color: var(--cyan-bright); }
 .terminal-log-line.tag-profit { border-left-color: var(--green-profit); }
 .terminal-log-line.tag-sl { border-left-color: var(--red-loss); }
+.terminal-log-line.tag-entry { border-left-color: #818cf8; }
 
 .empty-log-state {
   text-align: center;

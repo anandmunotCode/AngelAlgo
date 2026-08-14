@@ -363,29 +363,43 @@ function renderAdjustmentsAndLogs(allLegs, trades) {
     elements.adjustmentTimeline.innerHTML = timelineHtml;
   }
 
-  // Audit Logs
+  // Audit Logs (from trade_log.csv)
   elements.tradesCountBadge.textContent = `${trades.length} EVENTS`;
   if (trades.length === 0) {
     elements.auditLogsBox.innerHTML = `<div class="empty-log-state">Awaiting execution audit stream...</div>`;
   } else {
     let logHtml = '';
     trades.slice(0, 50).forEach(t => {
-      let tagClass = '';
-      const act = (t.Action || t.action || '').toUpperCase();
-      if (act.includes('RMS') || act.includes('MARGIN')) tagClass = 'tag-rms';
-      else if (act.includes('ADJUST') || act.includes('REBALANCE')) tagClass = 'tag-adj';
-      else if (act.includes('PROFIT') || act.includes('WIN')) tagClass = 'tag-profit';
-      else if (act.includes('SL') || act.includes('STOP') || act.includes('LOSS')) tagClass = 'tag-sl';
+      const reason = (t.reason || '').toUpperCase();
+      const legType = t.leg_type || '';
+      const optType = t.option_type || '';
+      const strike = t.strike || '';
+      const entryPrem = parseFloat(t.entry_premium || 0).toFixed(2);
+      const exitPrem = parseFloat(t.exit_premium || 0).toFixed(2);
+      const pnlInr = parseFloat(t.pnl_inr || 0);
+      const isHedge = t.is_hedge === 'True' || t.is_hedge === true;
+      const time = t.entry_time ? t.entry_time.split(' ')[1] || '09:18' : '09:18';
+      const exitTime = t.exit_time ? t.exit_time.split(' ')[1] || '' : '';
 
-      const time = t.Timestamp || t.timestamp || t.Time || '09:18';
-      const symbol = t.Symbol || t.strike || t.Leg || '';
-      const price = t.Price || t.price || '';
-      const desc = t.Details || t.Reason || `${act} ${symbol} @ ₹${price}`;
+      let tagClass = '';
+      let actionLabel = '';
+      let desc = '';
+
+      if (reason === 'ENTRY') {
+        tagClass = 'tag-entry';
+        actionLabel = isHedge ? '🛡️ BUY HEDGE' : '⚡ SELL SHORT';
+        desc = `${optType} ${strike} @ ₹${entryPrem}`;
+      } else {
+        tagClass = pnlInr >= 0 ? 'tag-profit' : 'tag-sl';
+        actionLabel = isHedge ? '🔄 CLOSE HEDGE' : '🔄 CLOSE SHORT';
+        const pnlStr = pnlInr >= 0 ? `+₹${pnlInr.toFixed(2)}` : `-₹${Math.abs(pnlInr).toFixed(2)}`;
+        desc = `${optType} ${strike} | Entry: ₹${entryPrem} → Exit: ₹${exitPrem} | P&L: ${pnlStr}`;
+      }
 
       logHtml += `
         <div class="terminal-log-line ${tagClass}">
-          <span class="log-time">[${time}]</span>
-          <strong>${act}</strong> ${desc}
+          <span class="log-time">[${reason === 'ENTRY' ? time : exitTime || time}]</span>
+          <strong>${actionLabel}</strong> ${desc}
         </div>
       `;
     });

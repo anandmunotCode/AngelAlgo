@@ -108,6 +108,7 @@ class PositionManager:
             f"{'HEDGE' if is_hedge else 'SHORT'}"
         )
         self.save()
+        self._log_trade(leg, "ENTRY", is_entry=True)
         return leg["id"]
 
     def update_surge_baseline(self, leg_id, new_baseline):
@@ -454,8 +455,8 @@ class PositionManager:
 
     # ─── TRADE LOG ────────────────────────────────────────────────
 
-    def _log_trade(self, leg, reason):
-        """Append closed trade to CSV log."""
+    def _log_trade(self, leg, reason, is_entry=False):
+        """Append trade event (entry or exit) to CSV log."""
         file_exists = os.path.exists(self.trade_log_file)
         with open(self.trade_log_file, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -465,18 +466,34 @@ class PositionManager:
                     "strike", "entry_premium", "exit_premium", "pnl_pts", "pnl_inr",
                     "is_hedge", "reason"
                 ])
-            writer.writerow([
-                self.position["expiry_date"],
-                leg["entry_time"],
-                leg["exit_time"],
-                leg["leg_type"],
-                leg["option_type"],
-                leg["strike"],
-                leg["entry_premium"],
-                leg["exit_premium"],
-                round(leg["entry_premium"] - leg["exit_premium"], 2) if not leg["is_hedge"]
-                    else round(leg["exit_premium"] - leg["entry_premium"], 2),
-                round(leg["pnl"], 2),
-                leg["is_hedge"],
-                reason,
-            ])
+            if is_entry:
+                writer.writerow([
+                    self.position["expiry_date"],
+                    leg["entry_time"],
+                    "",
+                    leg["leg_type"],
+                    leg["option_type"],
+                    leg["strike"],
+                    leg["entry_premium"],
+                    0.0,
+                    0.0,
+                    0.0,
+                    leg["is_hedge"],
+                    reason,
+                ])
+            else:
+                writer.writerow([
+                    self.position["expiry_date"],
+                    leg["entry_time"],
+                    leg["exit_time"],
+                    leg["leg_type"],
+                    leg["option_type"],
+                    leg["strike"],
+                    leg["entry_premium"],
+                    leg["exit_premium"],
+                    round(leg["entry_premium"] - leg["exit_premium"], 2) if not leg["is_hedge"]
+                        else round(leg["exit_premium"] - leg["entry_premium"], 2),
+                    round(leg["pnl"], 2),
+                    leg["is_hedge"],
+                    reason,
+                ])
