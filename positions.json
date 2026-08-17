@@ -105,8 +105,8 @@
       "iv_at_entry": 0.07674192185872626,
       "entry_premium": 25.4,
       "surge_baseline_premium": 59.2,
-      "current_premium": 19.8,
-      "current_delta": 0.2511798897282982,
+      "current_premium": 23.8,
+      "current_delta": 0.34416920418190744,
       "entry_time": "2026-08-14 13:46:02",
       "symbol_token": "45101",
       "trading_symbol": "NIFTY18AUG2624250PE",
@@ -114,8 +114,8 @@
       "is_hedge": false,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": 364.0,
-      "current_iv": 0.09833613925431318
+      "pnl": 104.0,
+      "current_iv": 0.0815262702118798
     },
     {
       "id": "4b5df4ba",
@@ -127,8 +127,8 @@
       "iv_at_entry": 0.09015606323885807,
       "entry_premium": 6.5,
       "surge_baseline_premium": 6.5,
-      "current_premium": 3.8,
-      "current_delta": 0.05097526928680113,
+      "current_premium": 4.05,
+      "current_delta": 0.06004837577195041,
       "entry_time": "2026-08-14 13:46:02",
       "symbol_token": "45093",
       "trading_symbol": "NIFTY18AUG2624050PE",
@@ -136,8 +136,8 @@
       "is_hedge": true,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -175.5,
-      "current_iv": 0.1325622175969107
+      "pnl": -159.25,
+      "current_iv": 0.12339770175477938
     },
     {
       "id": "1e046139",
@@ -193,8 +193,8 @@
       "iv_at_entry": 0.13666791395757683,
       "entry_premium": 72.6,
       "surge_baseline_premium": 72.6,
-      "current_premium": 143.0,
-      "current_delta": 0.6490269486471806,
+      "current_premium": 112.4,
+      "current_delta": 0.5738905323252319,
       "entry_time": "2026-08-17 10:43:37",
       "symbol_token": "45100",
       "trading_symbol": "NIFTY18AUG2624250CE",
@@ -202,8 +202,8 @@
       "is_hedge": false,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -4576.0,
-      "current_iv": 0.17380115420123035
+      "pnl": -2587.0,
+      "current_iv": 0.17903585290652782
     },
     {
       "id": "5ca60e25",
@@ -215,8 +215,8 @@
       "iv_at_entry": 0.13556118787306753,
       "entry_premium": 13.2,
       "surge_baseline_premium": 13.2,
-      "current_premium": 32.1,
-      "current_delta": 0.2772873306383912,
+      "current_premium": 17.2,
+      "current_delta": 0.18230175709194135,
       "entry_time": "2026-08-17 10:43:37",
       "symbol_token": "45108",
       "trading_symbol": "NIFTY18AUG2624450CE",
@@ -224,8 +224,8 @@
       "is_hedge": true,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": 1228.5,
-      "current_iv": 0.14071640665975804
+      "pnl": 260.0,
+      "current_iv": 0.13739030488456908
     }
   ],
   "adjustments": [
@@ -260,21 +260,21 @@
       "new_hedge_premium": 13.2
     }
   ],
-  "spot_price": 24333.85,
+  "spot_price": 24287.65,
   "trading_mode": "PAPER_TRADING",
   "is_paper_trading": true,
-  "net_delta": -0.1715349975672923,
-  "net_gamma": -0.00164567080074954,
-  "net_theta": 21.642678826687153,
-  "net_vega": -3.3388943107681115,
+  "net_delta": -0.10746794682333355,
+  "net_gamma": -0.0030125696318840296,
+  "net_theta": 31.734175042850786,
+  "net_vega": -4.7660685894524315,
   "deployed_margin": 95000.0,
   "lot_size": 65,
   "is_straddle": true,
   "total_realized_pnl": 2505.75,
-  "total_unrealized_pnl": -3159.0,
-  "total_pnl": -653.25,
-  "roi_pct": -0.69,
-  "max_short_surge_pct": 96.97,
+  "total_unrealized_pnl": -2382.250000000001,
+  "total_pnl": 123.49999999999909,
+  "roi_pct": 0.13,
+  "max_short_surge_pct": 54.82,
   "surge_trigger_pct": 50.0,
   "straddle_entry_combined_premium": 131.8
 }
