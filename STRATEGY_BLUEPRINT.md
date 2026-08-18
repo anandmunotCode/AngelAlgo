@@ -7,7 +7,7 @@ The system enters on the configured cycle start day (default: Wednesday) at 09:1
 
 > **Note:** The entry day is controlled by `CYCLE_START_DAY` in `config.py` (Python weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri). Change this value to enter on a different day if a cycle was missed.
 
-> **Current Cycle:** `CYCLE_START_DAY = 4` (Friday). Revert to `2` (Wednesday) after the Tuesday 2026-08-18 expiry.
+> **Current Cycle:** `CYCLE_START_DAY = 2` (Wednesday to Tuesday weekly cycle).
 
 ---
 

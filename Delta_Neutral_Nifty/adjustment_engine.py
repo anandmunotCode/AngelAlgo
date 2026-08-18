@@ -145,16 +145,30 @@ class AdjustmentEngine:
         logger.info(f"  Trigger: {trigger}")
         logger.info(f"  Closing profitable {profitable_side} leg @ strike {profitable_leg['strike']}")
 
-        # Step 1: Close profitable short leg
+        # Step 1: Close profitable short leg (BUY back)
+        if not paper_mode and self.api:
+            short_sym = profitable_leg.get("trading_symbol") or f"NIFTY_{int(profitable_leg['strike'])}_{profitable_side}"
+            short_tok = profitable_leg.get("symbol_token", "")
+            short_q = profitable_leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
+            logger.info(f"  [LIVE ORDER] Closing profitable short leg: BUY {short_q}x {short_sym} ({short_tok})")
+            self.api.place_order(short_sym, short_tok, "BUY", short_q)
+
         pnl_short = self.pm.close_leg(
             profitable_leg["id"],
             profitable_leg["current_premium"],
             f"ADJ: {trigger}"
         )
 
-        # Step 2: Close paired hedge
+        # Step 2: Close paired hedge (SELL)
         pnl_hedge = 0.0
         if profitable_hedge:
+            if not paper_mode and self.api:
+                hedge_sym = profitable_hedge.get("trading_symbol") or f"NIFTY_{int(profitable_hedge['strike'])}_{profitable_side}"
+                hedge_tok = profitable_hedge.get("symbol_token", "")
+                hedge_q = profitable_hedge.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
+                logger.info(f"  [LIVE ORDER] Closing profitable hedge leg: SELL {hedge_q}x {hedge_sym} ({hedge_tok})")
+                self.api.place_order(hedge_sym, hedge_tok, "SELL", hedge_q)
+
             pnl_hedge = self.pm.close_leg(
                 profitable_hedge["id"],
                 profitable_hedge["current_premium"],
@@ -200,7 +214,6 @@ class AdjustmentEngine:
         )
 
         # Check straddle BEFORE placing new legs
-        losing_leg = action["losing_leg"]
         would_be_straddle = abs(new_short_strike - losing_leg["strike"]) <= config.STRADDLE_PROXIMITY_PTS
 
         if would_be_straddle:
@@ -209,7 +222,31 @@ class AdjustmentEngine:
                 f"Losing strike {losing_leg['strike']} → STRADDLE REACHED"
             )
 
-        # Step 5: Place new short leg
+        # Step 5: Place new hedge leg FIRST (Hedge-First for Margin Benefit)
+        hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side) if self.api else None
+        hedge_token = hedge_token_info["token"] if hedge_token_info else ""
+        hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
+
+        if not paper_mode and hedge_token_info and self.api:
+            self.api.place_order(
+                hedge_symbol, hedge_token, "BUY",
+                config.LOT_SIZE * config.NUM_LOTS
+            )
+
+        hedge_leg_type = f"LONG_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
+        self.pm.add_leg(
+            leg_type=hedge_leg_type,
+            strike=new_hedge_strike,
+            option_type=profitable_side,
+            delta_at_entry=new_hedge_delta,
+            iv_at_entry=new_hedge_iv,
+            entry_premium=new_hedge_premium,
+            symbol_token=hedge_token,
+            trading_symbol=hedge_symbol,
+            is_hedge=True,
+        )
+
+        # Step 6: Place new short leg SECOND
         token_info = self.api.get_token_info(self.expiry_date, new_short_strike, profitable_side) if self.api else None
         short_token = token_info["token"] if token_info else ""
         short_symbol = token_info["symbol"] if token_info else f"NIFTY_{int(new_short_strike)}_{profitable_side}"
@@ -231,30 +268,6 @@ class AdjustmentEngine:
             symbol_token=short_token,
             trading_symbol=short_symbol,
             is_hedge=False,
-        )
-
-        # Step 6: Place new hedge
-        hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side) if self.api else None
-        hedge_token = hedge_token_info["token"] if hedge_token_info else ""
-        hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
-
-        if not paper_mode and hedge_token_info:
-            self.api.place_order(
-                hedge_symbol, hedge_token, "BUY",
-                config.LOT_SIZE * config.NUM_LOTS
-            )
-
-        hedge_leg_type = f"LONG_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
-        self.pm.add_leg(
-            leg_type=hedge_leg_type,
-            strike=new_hedge_strike,
-            option_type=profitable_side,
-            delta_at_entry=new_hedge_delta,
-            iv_at_entry=new_hedge_iv,
-            entry_premium=new_hedge_premium,
-            symbol_token=hedge_token,
-            trading_symbol=hedge_symbol,
-            is_hedge=True,
         )
 
         # Step 7: Reset losing short leg's surge baseline to its CURRENT price

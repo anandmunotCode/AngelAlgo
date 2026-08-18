@@ -143,7 +143,7 @@ class StrategyRunner:
                 if ((self.expiry_date and now.date() >= self.expiry_date) or is_expiry_day(now.date())) and now.hour >= 15:
                     if self.pm.is_active:
                         logger.info(f"Expiry day ({self.expiry_date}) market closed. Closing all positions.")
-                        self.pm.close_all("EXPIRY_CLOSE")
+                        self._close_all_positions("EXPIRY_CLOSE")
                     break
 
                 # Pre-market or post-market check
@@ -202,7 +202,8 @@ class StrategyRunner:
     def _execute_initial_entry(self, spot, T):
         """
         Execute the initial Iron Condor:
-        SELL 0.15-delta CE + PE, BUY 0.05-delta CE + PE
+        1. BUY 0.05-delta CE + PE (Hedges first for RMS margin reduction)
+        2. SELL 0.15-delta CE + PE (Short strangle legs)
 
         Uses WebSocket V2 real-time LTPs for ALL strikes simultaneously.
         """
@@ -245,29 +246,29 @@ class StrategyRunner:
             logger.error("Could not find all required strikes!")
             return
 
+        logger.info(f"  BUY  CE @ {ce_h_strike} (Delta={ce_h_delta:.4f}, Prem={ce_h_prem:.2f}) [HEDGE FIRST]")
+        logger.info(f"  BUY  PE @ {pe_h_strike} (Delta={pe_h_delta:.4f}, Prem={pe_h_prem:.2f}) [HEDGE FIRST]")
         logger.info(f"  SELL CE @ {ce_strike} (Delta={ce_delta:.4f}, IV={ce_iv*100:.1f}%, Prem={ce_prem:.2f})")
         logger.info(f"  SELL PE @ {pe_strike} (Delta={pe_delta:.4f}, IV={pe_iv*100:.1f}%, Prem={pe_prem:.2f})")
-        logger.info(f"  BUY  CE @ {ce_h_strike} (Delta={ce_h_delta:.4f}, Prem={ce_h_prem:.2f}) [HEDGE]")
-        logger.info(f"  BUY  PE @ {pe_h_strike} (Delta={pe_h_delta:.4f}, Prem={pe_h_prem:.2f}) [HEDGE]")
 
         net_credit = (ce_prem + pe_prem) - (ce_h_prem + pe_h_prem)
         logger.info(f"  Net Credit: {net_credit:.2f} pts = Rs.{net_credit * config.LOT_SIZE:,.2f}")
 
-        # Place orders (or simulate)
-        self._place_leg("SHORT_CALL", ce_strike, "CE", ce_delta, ce_iv, ce_prem, "SELL", False)
-        self._place_leg("SHORT_PUT", pe_strike, "PE", pe_delta, pe_iv, pe_prem, "SELL", False)
+        # Place orders (Hedge first for broker margin benefit, then short legs)
         self._place_leg("LONG_CALL", ce_h_strike, "CE", ce_h_delta, ce_h_iv, ce_h_prem, "BUY", True)
         self._place_leg("LONG_PUT", pe_h_strike, "PE", pe_h_delta, pe_h_iv, pe_h_prem, "BUY", True)
+        self._place_leg("SHORT_CALL", ce_strike, "CE", ce_delta, ce_iv, ce_prem, "SELL", False)
+        self._place_leg("SHORT_PUT", pe_strike, "PE", pe_delta, pe_iv, pe_prem, "SELL", False)
 
         print_banner("IRON CONDOR ENTERED SUCCESSFULLY")
 
     def _place_leg(self, leg_type, strike, opt_type, delta_val, iv, premium, txn, is_hedge):
         """Place order and add leg to position manager."""
-        token_info = self.api.get_token_info(self.expiry_date, strike, opt_type)
+        token_info = self.api.get_token_info(self.expiry_date, strike, opt_type) if self.api else None
         token = token_info["token"] if token_info else ""
         symbol = token_info["symbol"] if token_info else f"NIFTY_{int(strike)}_{opt_type}"
 
-        if not self.paper_mode and token_info:
+        if not self.paper_mode and token_info and self.api:
             self.api.place_order(symbol, token, txn, config.LOT_SIZE * config.NUM_LOTS)
 
         self.pm.add_leg(
@@ -275,6 +276,39 @@ class StrategyRunner:
             delta_at_entry=delta_val, iv_at_entry=iv, entry_premium=premium,
             symbol_token=token, trading_symbol=symbol, is_hedge=is_hedge,
         )
+
+    def _close_all_positions(self, reason="EXPIRY_CLOSE"):
+        """
+        Square off all open legs on Angel One (if live) and update position manager.
+        Order of exit:
+        1. BUY back all SHORT legs first (closes market exposure & releases risk).
+        2. SELL all LONG hedge legs second.
+        """
+        print_banner(f"CLOSING ALL POSITIONS: {reason}")
+        logger.info(f"[CLOSE ALL] Executing square-off for {len(self.pm.open_legs)} open legs. Reason: {reason}")
+
+        # 1. Close Short legs first (BUY back)
+        for leg in list(self.pm.open_short_legs):
+            if not self.paper_mode and self.api:
+                symbol = leg.get("trading_symbol") or f"NIFTY_{int(leg['strike'])}_{leg['option_type']}"
+                token = leg.get("symbol_token", "")
+                qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
+                logger.info(f"  [LIVE SQUAREOFF SHORT] BUY {qty}x {symbol} ({token})")
+                self.api.place_order(symbol, token, "BUY", qty)
+            self.pm.close_leg(leg["id"], leg.get("current_premium", 0.0), reason)
+
+        # 2. Close Hedge legs second (SELL)
+        for leg in list(self.pm.open_hedge_legs):
+            if not self.paper_mode and self.api:
+                symbol = leg.get("trading_symbol") or f"NIFTY_{int(leg['strike'])}_{leg['option_type']}"
+                token = leg.get("symbol_token", "")
+                qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
+                logger.info(f"  [LIVE SQUAREOFF HEDGE] SELL {qty}x {symbol} ({token})")
+                self.api.place_order(symbol, token, "SELL", qty)
+            self.pm.close_leg(leg["id"], leg.get("current_premium", 0.0), reason)
+
+        self.pm.position["status"] = "CLOSED"
+        self.pm.save()
 
     def _monitor_and_adjust(self, spot, T, now):
         """
@@ -351,7 +385,7 @@ class StrategyRunner:
             if now.hour == 15 and now.minute >= 15:
                 print_banner("EXPIRY DAY AUTO-SQUAREOFF (15:15 IST)")
                 logger.info(f"Expiry day ({self.expiry_date}) market auto-squareoff reached at 15:15 IST. Closing all positions.")
-                self.pm.close_all(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
+                self._close_all_positions(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
                 return
 
         # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
@@ -361,7 +395,7 @@ class StrategyRunner:
             if sl_hit:
                 print_banner("STRADDLE STOP LOSS TRIGGERED")
                 logger.warning(f"[STRADDLE EXIT] {sl_reason}")
-                self.pm.close_all(reason=sl_reason)
+                self._close_all_positions(reason=sl_reason)
                 return
 
             # 3. Check 70% Straddle Premium Decay Profit Target
@@ -369,7 +403,7 @@ class StrategyRunner:
             if tp_hit:
                 print_banner("STRADDLE 70% THETA DECAY PROFIT TARGET REACHED")
                 logger.info(f"[STRADDLE PROFIT EXIT] {tp_reason}")
-                self.pm.close_all(reason=tp_reason)
+                self._close_all_positions(reason=tp_reason)
                 return
 
             # Zero adjustments during straddle mode
@@ -381,7 +415,7 @@ class StrategyRunner:
         if otm_hit:
             print_banner("OTM FULL DECAY PROFIT TARGET REACHED (< ₹1.00)")
             logger.info(f"[OTM PROFIT EXIT] {otm_reason}")
-            self.pm.close_all(reason=otm_reason)
+            self._close_all_positions(reason=otm_reason)
             return
 
         # 2. Evaluate Dynamic Adjustment Triggers (e.g. 50% Losing Leg Surge)

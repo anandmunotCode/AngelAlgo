@@ -1,4 +1,4 @@
-name: Delta Neutral Nifty - Paper Trading
+name: Delta Neutral Nifty - Live Trading
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   # ═══════════════════════════════════════════════════════════════
   # MORNING SESSION (08:55 AM → 01:00 PM IST)
-  # Runs the trading engine for ~4 hours, well within the 6-hour limit.
+  # Runs the live trading engine for ~4 hours, well within the 6-hour limit.
   # At 13:00 IST, the engine saves all state to positions.json and exits.
   # ═══════════════════════════════════════════════════════════════
   morning_session:
@@ -48,7 +48,7 @@ jobs:
         MARKET_CLOSE_HOUR: "13"
         MARKET_CLOSE_MINUTE: "0"
       run: |
-        python -m Delta_Neutral_Nifty
+        python -m Delta_Neutral_Nifty --live
 
     - name: Midday Commit & Push State (Relay Baton)
       if: always()
@@ -104,7 +104,7 @@ jobs:
         MARKET_CLOSE_HOUR: "15"
         MARKET_CLOSE_MINUTE: "41"
       run: |
-        python -m Delta_Neutral_Nifty
+        python -m Delta_Neutral_Nifty --live
 
     - name: Final Commit & Push Trade Logs
       if: always()

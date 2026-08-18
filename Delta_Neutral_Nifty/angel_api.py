@@ -410,7 +410,7 @@ class AngelOneAPI:
     def place_order(self, symbol, token, transaction_type, quantity,
                     price=0, order_type="MARKET", product_type="CARRYFORWARD"):
         """
-        Place order on Angel One.
+        Place order on Angel One with error handling and order verification.
         transaction_type: "BUY" or "SELL"
         order_type: "MARKET" or "LIMIT"
         product_type: "CARRYFORWARD" (NRML) or "INTRADAY"
@@ -419,7 +419,7 @@ class AngelOneAPI:
         order_params = {
             "variety": "NORMAL",
             "tradingsymbol": symbol,
-            "symboltoken": token,
+            "symboltoken": str(token),
             "transactiontype": transaction_type,
             "exchange": config.NIFTY_OPTIONS_EXCHANGE,
             "ordertype": order_type,
@@ -430,9 +430,46 @@ class AngelOneAPI:
             "stoploss": "0",
             "quantity": str(quantity),
         }
-        response = self.smart_api.placeOrder(order_params)
-        logger.info(f"[ORDER] {transaction_type} {quantity}x {symbol} @ {order_type} -> {response}")
-        return response
+        try:
+            response = self.smart_api.placeOrder(order_params)
+            logger.info(f"[ORDER PLACED] {transaction_type} {quantity}x {symbol} @ {order_type} -> {response}")
+            
+            if isinstance(response, dict) and response.get("status"):
+                order_id = response.get("data", {}).get("orderid", "")
+                logger.info(f"✅ [ORDER SUCCESS] Order ID: {order_id} | {transaction_type} {quantity}x {symbol}")
+                self._verify_order_status(order_id, symbol)
+            elif isinstance(response, str) and response.isdigit():
+                # Some versions of SmartAPI return the orderid directly as string
+                order_id = response
+                logger.info(f"✅ [ORDER SUCCESS] Order ID: {order_id} | {transaction_type} {quantity}x {symbol}")
+                self._verify_order_status(order_id, symbol)
+            else:
+                err_msg = response.get("message") if isinstance(response, dict) else str(response)
+                logger.error(f"❌ [ORDER REJECTED/FAILED] {transaction_type} {quantity}x {symbol} | Response: {err_msg}")
+            return response
+        except Exception as e:
+            logger.error(f"❌ [ORDER EXCEPTION] Failed to place {transaction_type} {quantity}x {symbol}: {e}", exc_info=True)
+            return None
+
+    def _verify_order_status(self, order_id, symbol):
+        """Quick verification of order execution status in Angel One order book."""
+        if not order_id:
+            return
+        try:
+            time.sleep(0.5)  # allow exchange engine to register fill
+            ob = self.get_order_book()
+            if ob and isinstance(ob, dict) and ob.get("status") and ob.get("data"):
+                for order in ob["data"]:
+                    if str(order.get("orderid")) == str(order_id):
+                        status = order.get("orderstatus", "").upper()
+                        avg_price = order.get("averageprice", 0)
+                        filled_qty = order.get("filledshares", 0)
+                        logger.info(f"📋 [ORDER BOOK STATUS] Order {order_id} ({symbol}): {status} | Filled: {filled_qty} | Avg Price: {avg_price}")
+                        if status in ("REJECTED", "CANCELLED"):
+                            logger.error(f"⚠️ [ORDER ISSUE] Order {order_id} status={status}: {order.get('text', '')}")
+                        break
+        except Exception as e:
+            logger.debug(f"Order verification check error: {e}")
 
     def get_positions(self):
         """Get all current positions from Angel One."""
