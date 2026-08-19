@@ -396,8 +396,11 @@ class StrategyRunner:
         # Persist live greeks, margin & mode for Node.js Web Dashboard streaming
         self.pm.update_live_greeks(portfolio, spot, deployed_margin=deployed_margin, is_paper=self.paper_mode)
 
-        # Print status every refresh
-        self._print_live_status(spot, T, portfolio)
+        # Print status every 10 seconds to keep the terminal output clean and noise-free
+        now_ts = time.time()
+        if now_ts - getattr(self, "_last_status_print_time", 0) >= 10.0:
+            self._print_live_status(spot, T, portfolio)
+            self._last_status_print_time = now_ts
 
         # ─── EXPIRY DAY AUTO-SQUAREOFF (15:15 IST) ────────────────
         if is_expiry_day(now.date()) or (self.expiry_date and now.date() >= self.expiry_date):
