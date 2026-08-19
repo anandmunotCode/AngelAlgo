@@ -12,90 +12,20 @@ permissions:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
-  # MORNING SESSION (08:55 AM → 01:00 PM IST)
-  # Runs the live trading engine for ~4 hours, well within the 6-hour limit.
-  # At 13:00 IST, the engine saves all state to positions.json and exits.
+  # LIVE TRADING SESSION (08:55 AM → 03:41 PM IST)
+  # Runs on Self-Hosted Windows Runner (Zero Cloud Limits)
+  # Automatically monitors positions, executes adjustments,
+  # and saves/pushes state to GitHub at market close.
   # ═══════════════════════════════════════════════════════════════
-  morning_session:
-    runs-on: ubuntu-latest
-    timeout-minutes: 300  # 5 hours safety net
+  trading_session:
+    runs-on: self-hosted
+    timeout-minutes: 420  # 7 hours safety net
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.11'
-
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r Delta_Neutral_Nifty/requirements.txt
-
-    - name: Configure Git
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-    - name: Run Trading Engine (Morning Session → 13:00 IST)
-      env:
-        ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
-        ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
-        ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
-        ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
-        MARKET_CLOSE_HOUR: "13"
-        MARKET_CLOSE_MINUTE: "0"
-      run: |
-        python -m Delta_Neutral_Nifty --live
-
-    - name: Midday Commit & Push State (Relay Baton)
-      if: always()
-      run: |
-        git add positions.json trade_log.csv || true
-        git add paper_trades_log.csv logs/ 2>/dev/null || true
-        git commit -m "Relay: morning session state $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M IST') [skip ci]" || exit 0
-        git pull --rebase 2>/dev/null || true
-        git push
-
-  # ═══════════════════════════════════════════════════════════════
-  # AFTERNOON SESSION (01:00 PM → 03:41 PM IST)
-  # Triggers the millisecond the morning session completes.
-  # Downloads the latest code (with updated positions.json),
-  # resumes monitoring, and runs until the real market close.
-  # ═══════════════════════════════════════════════════════════════
-  afternoon_session:
-    needs: morning_session
-    runs-on: ubuntu-latest
-    timeout-minutes: 240  # 4 hours safety net
-
-    steps:
-    - name: Checkout Code (with latest positions.json from morning)
-      uses: actions/checkout@v5
-      with:
-        ref: ${{ github.ref }}
-
-    - name: Pull Latest State from Morning Session
-      run: |
-        git pull --rebase origin $(git branch --show-current) || true
-
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.11'
-
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r Delta_Neutral_Nifty/requirements.txt
-
-    - name: Configure Git
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-    - name: Run Trading Engine (Afternoon Session → 15:41 IST)
+    - name: Run Trading Engine (Full Day → 15:41 IST)
       env:
         ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
         ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
@@ -103,14 +33,22 @@ jobs:
         ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         MARKET_CLOSE_HOUR: "15"
         MARKET_CLOSE_MINUTE: "41"
+      shell: powershell
       run: |
+        python -m pip install -r Delta_Neutral_Nifty/requirements.txt --quiet
         python -m Delta_Neutral_Nifty --live
 
     - name: Final Commit & Push Trade Logs
       if: always()
+      shell: powershell
       run: |
-        git add positions.json trade_log.csv || true
-        git add paper_trades_log.csv logs/ 2>/dev/null || true
-        git commit -m "Market close: final state $(TZ=Asia/Kolkata date '+%Y-%m-%d %H:%M IST') [skip ci]" || exit 0
-        git pull --rebase 2>/dev/null || true
-        git push
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add positions.json trade_log.csv
+        git diff --cached --quiet
+        if ($LASTEXITCODE -ne 0) {
+            git commit -m "Market close: final state $(Get-Date -Format 'yyyy-MM-dd HH:mm IST') [skip ci]"
+            git push origin main
+        } else {
+            Write-Host "No changes to commit."
+        }
