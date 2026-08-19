@@ -431,22 +431,20 @@ class AngelOneAPI:
             "quantity": str(quantity),
         }
         try:
-            response = self.smart_api.placeOrder(order_params)
-            logger.info(f"[ORDER PLACED] {transaction_type} {quantity}x {symbol} @ {order_type} -> {response}")
-            
-            if isinstance(response, dict) and response.get("status"):
-                order_id = response.get("data", {}).get("orderid", "")
+            # SmartAPI SDK placeOrder() returns:
+            #   - orderid as STRING on success (e.g. "240819000140605")
+            #   - None on failure (SDK logs the error internally)
+            order_id = self.smart_api.placeOrder(order_params)
+            logger.info(f"[ORDER RAW RESPONSE] {transaction_type} {quantity}x {symbol} @ {order_type} -> {repr(order_id)}")
+
+            if order_id is not None and str(order_id).strip():
+                order_id = str(order_id).strip()
                 logger.info(f"✅ [ORDER SUCCESS] Order ID: {order_id} | {transaction_type} {quantity}x {symbol}")
                 self._verify_order_status(order_id, symbol)
-            elif isinstance(response, str) and response.isdigit():
-                # Some versions of SmartAPI return the orderid directly as string
-                order_id = response
-                logger.info(f"✅ [ORDER SUCCESS] Order ID: {order_id} | {transaction_type} {quantity}x {symbol}")
-                self._verify_order_status(order_id, symbol)
+                return order_id
             else:
-                err_msg = response.get("message") if isinstance(response, dict) else str(response)
-                logger.error(f"❌ [ORDER REJECTED/FAILED] {transaction_type} {quantity}x {symbol} | Response: {err_msg}")
-            return response
+                logger.error(f"❌ [ORDER FAILED] {transaction_type} {quantity}x {symbol} | placeOrder returned None/empty. Check API key permissions, session, or broker RMS.")
+                return None
         except Exception as e:
             logger.error(f"❌ [ORDER EXCEPTION] Failed to place {transaction_type} {quantity}x {symbol}: {e}", exc_info=True)
             return None

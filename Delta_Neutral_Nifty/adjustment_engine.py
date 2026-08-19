@@ -151,7 +151,9 @@ class AdjustmentEngine:
             short_tok = profitable_leg.get("symbol_token", "")
             short_q = profitable_leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
             logger.info(f"  [LIVE ORDER] Closing profitable short leg: BUY {short_q}x {short_sym} ({short_tok})")
-            self.api.place_order(short_sym, short_tok, "BUY", short_q)
+            close_short_id = self.api.place_order(short_sym, short_tok, "BUY", short_q)
+            if close_short_id is None:
+                logger.error(f"  [ADJ CLOSE FAILED] Could not close profitable short leg {short_sym}!")
 
         pnl_short = self.pm.close_leg(
             profitable_leg["id"],
@@ -167,7 +169,9 @@ class AdjustmentEngine:
                 hedge_tok = profitable_hedge.get("symbol_token", "")
                 hedge_q = profitable_hedge.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
                 logger.info(f"  [LIVE ORDER] Closing profitable hedge leg: SELL {hedge_q}x {hedge_sym} ({hedge_tok})")
-                self.api.place_order(hedge_sym, hedge_tok, "SELL", hedge_q)
+                close_hedge_id = self.api.place_order(hedge_sym, hedge_tok, "SELL", hedge_q)
+                if close_hedge_id is None:
+                    logger.error(f"  [ADJ CLOSE FAILED] Could not close profitable hedge leg {hedge_sym}!")
 
             pnl_hedge = self.pm.close_leg(
                 profitable_hedge["id"],
@@ -228,10 +232,13 @@ class AdjustmentEngine:
         hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
 
         if not paper_mode and hedge_token_info and self.api:
-            self.api.place_order(
+            hedge_order_id = self.api.place_order(
                 hedge_symbol, hedge_token, "BUY",
                 config.LOT_SIZE * config.NUM_LOTS
             )
+            if hedge_order_id is None:
+                logger.error(f"[ADJ ABORTED] Could not place new hedge BUY @ {new_hedge_strike}. Adjustment incomplete!")
+                return False
 
         hedge_leg_type = f"LONG_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
         self.pm.add_leg(
@@ -252,10 +259,13 @@ class AdjustmentEngine:
         short_symbol = token_info["symbol"] if token_info else f"NIFTY_{int(new_short_strike)}_{profitable_side}"
 
         if not paper_mode and token_info and self.api:
-            self.api.place_order(
+            short_order_id = self.api.place_order(
                 short_symbol, short_token, "SELL",
                 config.LOT_SIZE * config.NUM_LOTS
             )
+            if short_order_id is None:
+                logger.error(f"[ADJ ABORTED] Could not place new short SELL @ {new_short_strike}. Hedge already placed - manual review needed!")
+                return False
 
         short_leg_type = f"SHORT_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
         self.pm.add_leg(

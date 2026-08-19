@@ -255,27 +255,42 @@ class StrategyRunner:
         logger.info(f"  Net Credit: {net_credit:.2f} pts = Rs.{net_credit * config.LOT_SIZE:,.2f}")
 
         # Place orders (Hedge first for broker margin benefit, then short legs)
-        self._place_leg("LONG_CALL", ce_h_strike, "CE", ce_h_delta, ce_h_iv, ce_h_prem, "BUY", True)
-        self._place_leg("LONG_PUT", pe_h_strike, "PE", pe_h_delta, pe_h_iv, pe_h_prem, "BUY", True)
-        self._place_leg("SHORT_CALL", ce_strike, "CE", ce_delta, ce_iv, ce_prem, "SELL", False)
-        self._place_leg("SHORT_PUT", pe_strike, "PE", pe_delta, pe_iv, pe_prem, "SELL", False)
+        # CRITICAL: If any order fails, abort entire entry to prevent phantom positions
+        legs_to_place = [
+            ("LONG_CALL", ce_h_strike, "CE", ce_h_delta, ce_h_iv, ce_h_prem, "BUY", True),
+            ("LONG_PUT", pe_h_strike, "PE", pe_h_delta, pe_h_iv, pe_h_prem, "BUY", True),
+            ("SHORT_CALL", ce_strike, "CE", ce_delta, ce_iv, ce_prem, "SELL", False),
+            ("SHORT_PUT", pe_strike, "PE", pe_delta, pe_iv, pe_prem, "SELL", False),
+        ]
+
+        for leg_args in legs_to_place:
+            success = self._place_leg(*leg_args)
+            if not success:
+                logger.error(f"[ENTRY ABORTED] Order failed for {leg_args[0]} @ {leg_args[1]}. No further orders will be placed.")
+                logger.error(f"[ENTRY ABORTED] Check Angel One app/order book for any partial fills and square off manually if needed.")
+                return
 
         print_banner("IRON CONDOR ENTERED SUCCESSFULLY")
 
     def _place_leg(self, leg_type, strike, opt_type, delta_val, iv, premium, txn, is_hedge):
-        """Place order and add leg to position manager."""
+        """Place order and add leg to position manager. Returns True on success, False on failure."""
         token_info = self.api.get_token_info(self.expiry_date, strike, opt_type) if self.api else None
         token = token_info["token"] if token_info else ""
         symbol = token_info["symbol"] if token_info else f"NIFTY_{int(strike)}_{opt_type}"
 
         if not self.paper_mode and token_info and self.api:
-            self.api.place_order(symbol, token, txn, config.LOT_SIZE * config.NUM_LOTS)
+            order_id = self.api.place_order(symbol, token, txn, config.LOT_SIZE * config.NUM_LOTS)
+            if order_id is None:
+                logger.error(f"[ORDER FAILED] {leg_type} {txn} @ {strike} {opt_type} - Order not placed on broker!")
+                return False
+            logger.info(f"[ORDER CONFIRMED] {leg_type} {txn} @ {strike} {opt_type} -> OrderID: {order_id}")
 
         self.pm.add_leg(
             leg_type=leg_type, strike=strike, option_type=opt_type,
             delta_at_entry=delta_val, iv_at_entry=iv, entry_premium=premium,
             symbol_token=token, trading_symbol=symbol, is_hedge=is_hedge,
         )
+        return True
 
     def _close_all_positions(self, reason="EXPIRY_CLOSE"):
         """
@@ -294,7 +309,9 @@ class StrategyRunner:
                 token = leg.get("symbol_token", "")
                 qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
                 logger.info(f"  [LIVE SQUAREOFF SHORT] BUY {qty}x {symbol} ({token})")
-                self.api.place_order(symbol, token, "BUY", qty)
+                order_id = self.api.place_order(symbol, token, "BUY", qty)
+                if order_id is None:
+                    logger.error(f"  [SQUAREOFF FAILED] Could not close short leg {symbol}! Manual intervention needed.")
             self.pm.close_leg(leg["id"], leg.get("current_premium", 0.0), reason)
 
         # 2. Close Hedge legs second (SELL)
@@ -304,7 +321,9 @@ class StrategyRunner:
                 token = leg.get("symbol_token", "")
                 qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
                 logger.info(f"  [LIVE SQUAREOFF HEDGE] SELL {qty}x {symbol} ({token})")
-                self.api.place_order(symbol, token, "SELL", qty)
+                order_id = self.api.place_order(symbol, token, "SELL", qty)
+                if order_id is None:
+                    logger.error(f"  [SQUAREOFF FAILED] Could not close hedge leg {symbol}! Manual intervention needed.")
             self.pm.close_leg(leg["id"], leg.get("current_premium", 0.0), reason)
 
         self.pm.position["status"] = "CLOSED"
