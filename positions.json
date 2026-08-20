@@ -17,8 +17,8 @@
       "iv_at_entry": 0.11585801531920953,
       "entry_premium": 7.05,
       "surge_baseline_premium": 7.05,
-      "current_premium": 5.5,
-      "current_delta": 0.04763241416848215,
+      "current_premium": 4.35,
+      "current_delta": 0.04180189563678994,
       "entry_time": "2026-08-19 10:34:25",
       "symbol_token": "61793",
       "trading_symbol": "NIFTY25AUG2624700CE",
@@ -26,8 +26,8 @@
       "is_hedge": true,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -100.75,
-      "current_iv": 0.0971434090974366
+      "pnl": -175.5,
+      "current_iv": 0.09074524972869447
     },
     {
       "id": "0d2090ea",
@@ -61,8 +61,8 @@
       "iv_at_entry": 0.10586135448520073,
       "entry_premium": 22.85,
       "surge_baseline_premium": 34.9,
-      "current_premium": 31.35,
-      "current_delta": 0.20711444464145426,
+      "current_premium": 34.1,
+      "current_delta": 0.22552030669416764,
       "entry_time": "2026-08-19 10:34:31",
       "symbol_token": "61727",
       "trading_symbol": "NIFTY25AUG2624450CE",
@@ -70,8 +70,8 @@
       "is_hedge": false,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -552.5,
-      "current_iv": 0.09376300087012582
+      "pnl": -731.25,
+      "current_iv": 0.09283791631824266
     },
     {
       "id": "6417a923",
@@ -105,17 +105,17 @@
       "iv_at_entry": 0.10589232471309164,
       "entry_premium": 7.55,
       "surge_baseline_premium": 7.55,
-      "current_premium": 5.95,
-      "current_delta": 0.0487954767510289,
+      "current_premium": 6.75,
+      "current_delta": 0.049484997941612784,
       "entry_time": "2026-08-20 09:15:14",
       "symbol_token": "61533",
       "trading_symbol": "NIFTY25AUG2623750PE",
-      "status": "OPEN",
+      "status": "CLOSED",
       "is_hedge": true,
-      "exit_premium": 0.0,
-      "exit_time": "",
-      "pnl": -104.0,
-      "current_iv": 0.10130099571878141
+      "exit_premium": 6.75,
+      "exit_time": "2026-08-20 12:52:04",
+      "pnl": -51.999999999999986,
+      "current_iv": 0.1133743618944311
     },
     {
       "id": "9789d1ce",
@@ -127,17 +127,17 @@
       "iv_at_entry": 0.08842657742769083,
       "entry_premium": 36.55,
       "surge_baseline_premium": 36.55,
-      "current_premium": 26.0,
-      "current_delta": 0.20845498048304656,
+      "current_premium": 21.0,
+      "current_delta": -0.16555795419626038,
       "entry_time": "2026-08-20 09:15:16",
       "symbol_token": "61609",
       "trading_symbol": "NIFTY25AUG2624050PE",
-      "status": "OPEN",
+      "status": "CLOSED",
       "is_hedge": false,
-      "exit_premium": 0.0,
-      "exit_time": "",
-      "pnl": 685.75,
-      "current_iv": 0.0763759940782431
+      "exit_premium": 21.0,
+      "exit_time": "2026-08-20 12:52:03",
+      "pnl": 1010.7499999999998,
+      "current_iv": 0.0829041973133542
     }
   ],
   "adjustments": [
@@ -152,20 +152,20 @@
       "new_hedge_premium": 7.55
     }
   ],
-  "spot_price": 24208.8,
+  "spot_price": 24231.85,
   "trading_mode": "LIVE_TRADING",
   "is_paper_trading": false,
-  "net_delta": 0.00017747325904554634,
-  "net_gamma": -0.001662344337592454,
-  "net_theta": 8.031715465108643,
-  "net_vega": -10.72131472127135,
+  "net_delta": -0.1837184110573777,
+  "net_gamma": -0.0007943357173401525,
+  "net_theta": 6.255356607239005,
+  "net_vega": -5.976950468156529,
   "deployed_margin": 65000.0,
   "lot_size": 65,
   "is_straddle": false,
-  "total_realized_pnl": 744.2499999999999,
-  "total_unrealized_pnl": -71.50000000000023,
-  "total_pnl": 672.7499999999997,
-  "roi_pct": 1.03,
+  "total_realized_pnl": 1702.9999999999995,
+  "total_unrealized_pnl": -906.75,
+  "total_pnl": 796.2499999999995,
+  "roi_pct": 1.22,
   "max_short_surge_pct": 0.0,
   "surge_trigger_pct": 50.0
 }
