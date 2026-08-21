@@ -1,0 +1,24 @@
+[Unit]
+Description=AngelAlgo Delta Neutral Trading Engine
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/AngelAlgo
+ExecStart=/bin/bash /home/ubuntu/AngelAlgo/run_trading.sh
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Logging
+StandardOutput=append:/home/ubuntu/AngelAlgo/logs/systemd.log
+StandardError=append:/home/ubuntu/AngelAlgo/logs/systemd.log
+
+[Install]
+WantedBy=multi-user.target
