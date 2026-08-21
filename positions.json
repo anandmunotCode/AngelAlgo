@@ -17,8 +17,8 @@
       "iv_at_entry": 0.11585801531920953,
       "entry_premium": 7.05,
       "surge_baseline_premium": 7.05,
-      "current_premium": 4.35,
-      "current_delta": 0.04180189563678994,
+      "current_premium": 2.95,
+      "current_delta": 0.032519502074451485,
       "entry_time": "2026-08-19 10:34:25",
       "symbol_token": "61793",
       "trading_symbol": "NIFTY25AUG2624700CE",
@@ -26,8 +26,8 @@
       "is_hedge": true,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -175.5,
-      "current_iv": 0.09074524972869447
+      "pnl": -266.5,
+      "current_iv": 0.0916547564594185
     },
     {
       "id": "0d2090ea",
@@ -61,8 +61,8 @@
       "iv_at_entry": 0.10586135448520073,
       "entry_premium": 22.85,
       "surge_baseline_premium": 34.9,
-      "current_premium": 34.1,
-      "current_delta": 0.22552030669416764,
+      "current_premium": 21.4,
+      "current_delta": 0.18903773977442664,
       "entry_time": "2026-08-19 10:34:31",
       "symbol_token": "61727",
       "trading_symbol": "NIFTY25AUG2624450CE",
@@ -70,8 +70,8 @@
       "is_hedge": false,
       "exit_premium": 0.0,
       "exit_time": "",
-      "pnl": -731.25,
-      "current_iv": 0.09283791631824266
+      "pnl": 94.25,
+      "current_iv": 0.08156109856223182
     },
     {
       "id": "6417a923",
@@ -152,20 +152,20 @@
       "new_hedge_premium": 7.55
     }
   ],
-  "spot_price": 24231.85,
-  "trading_mode": "LIVE_TRADING",
-  "is_paper_trading": false,
-  "net_delta": -0.1837184110573777,
-  "net_gamma": -0.0007943357173401525,
-  "net_theta": 6.255356607239005,
-  "net_vega": -5.976950468156529,
+  "spot_price": 24252.0,
+  "trading_mode": "PAPER_TRADING",
+  "is_paper_trading": true,
+  "net_delta": -0.15651823769997517,
+  "net_gamma": -0.000995074353956813,
+  "net_theta": 5.440293011864501,
+  "net_vega": -5.01455817686137,
   "deployed_margin": 65000.0,
   "lot_size": 65,
   "is_straddle": false,
   "total_realized_pnl": 1702.9999999999995,
-  "total_unrealized_pnl": -906.75,
-  "total_pnl": 796.2499999999995,
-  "roi_pct": 1.22,
+  "total_unrealized_pnl": -172.24999999999983,
+  "total_pnl": 1530.7499999999998,
+  "roi_pct": 2.35,
   "max_short_surge_pct": 0.0,
   "surge_trigger_pct": 50.0
 }
