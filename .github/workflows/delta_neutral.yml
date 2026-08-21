@@ -25,14 +25,14 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Run Trading Engine (Full Day → 15:41 IST)
+    - name: Run Trading Engine (Full Day → 15:40 IST)
       env:
         ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
         ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
         ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
         ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         MARKET_CLOSE_HOUR: "15"
-        MARKET_CLOSE_MINUTE: "41"
+        MARKET_CLOSE_MINUTE: "40"
       shell: powershell
       run: |
         python -m pip install -r Delta_Neutral_Nifty/requirements.txt --quiet
