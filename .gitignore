@@ -2,6 +2,8 @@
 .env
 *.pem
 angel-key.pem
+rootkey.csv
+*credentials*.csv
 
 # Python Bytecode & Cache
 __pycache__/
