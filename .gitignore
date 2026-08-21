@@ -1,5 +1,7 @@
-# Environment variables (NEVER commit credentials)
+# Environment variables & Private Keys (NEVER commit)
 .env
+*.pem
+angel-key.pem
 
 # Python Bytecode & Cache
 __pycache__/
