@@ -67,7 +67,7 @@ FALLBACK_POLL_SECONDS = 3          # REST polling if WebSocket fails
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MINUTE = 15
 MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", 15))
-MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 41))
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 40))
 
 # Wait after market open for initial volatility to settle
 ENTRY_DELAY_MINUTES = 3            # Enter at 09:18 (3 mins after open)

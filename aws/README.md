@@ -57,10 +57,10 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 | 9:00 AM | `aws/run_trading.sh` pulls latest code, installs deps |
 | 9:15 AM | Market opens, engine starts monitoring |
 | 9:18 AM | Entry window → positions taken |
-| 9:18 - 3:41 PM | Real-time monitoring + auto-adjustments |
-| 3:41 PM | Engine auto-stops (market close logic in code) |
-| 3:41 PM | Positions + logs pushed to GitHub (aws-deploy) |
-| 3:45 PM | Cron safety stop `systemctl stop angelalgo` |
+| 9:18 - 3:40 PM | Real-time monitoring + auto-adjustments |
+| 3:40 PM | Engine auto-stops (market close logic in code) |
+| 3:40 PM | Positions + logs pushed to GitHub (aws-deploy) |
+| 3:42 PM | Cron safety stop `systemctl stop angelalgo` |
 
 ---
 

@@ -78,9 +78,9 @@ echo "════════════════════════�
 (crontab -l 2>/dev/null | grep -v "angelalgo"; echo "0 9 * * 1-5 sudo systemctl start angelalgo >> /home/ubuntu/AngelAlgo/logs/cron.log 2>&1") | crontab -
 echo "  ✓ Cron job set: 9:00 AM IST, Mon-Fri"
 
-# Add market close stop cron (3:45 PM IST - 4 mins after engine auto-stops)
-(crontab -l 2>/dev/null | grep -v "angelalgo-stop"; echo "45 15 * * 1-5 sudo systemctl stop angelalgo >> /home/ubuntu/AngelAlgo/logs/cron.log 2>&1 # angelalgo-stop") | crontab -
-echo "  ✓ Cron stop set: 3:45 PM IST, Mon-Fri (safety cleanup)"
+# Add market close stop cron (3:42 PM IST - 2 mins after engine auto-stops at 15:40)
+(crontab -l 2>/dev/null | grep -v "angelalgo-stop"; echo "42 15 * * 1-5 sudo systemctl stop angelalgo >> /home/ubuntu/AngelAlgo/logs/cron.log 2>&1 # angelalgo-stop") | crontab -
+echo "  ✓ Cron stop set: 3:42 PM IST, Mon-Fri (safety cleanup)"
 
 # ─── Create logs directory ───────────────────────────────────
 mkdir -p /home/ubuntu/AngelAlgo/logs
