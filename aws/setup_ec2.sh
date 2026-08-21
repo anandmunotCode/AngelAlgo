@@ -57,8 +57,9 @@ fi
 
 # ─── 6. Make scripts executable ──────────────────────────────
 echo "[6/7] Setting file permissions..."
-chmod +x run_trading.sh
-echo "  ✓ run_trading.sh is executable"
+chmod +x aws/run_trading.sh
+chmod +x aws/setup_ec2.sh
+echo "  ✓ Scripts in aws/ are executable"
 
 # ─── 7. Install systemd service (auto-restart on crash) ─────
 echo "[7/7] Installing systemd service for auto-restart..."

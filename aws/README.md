@@ -8,8 +8,8 @@ SSH into your EC2 instance and run:
 # 1. SSH into EC2
 ssh -i "your-key.pem" ubuntu@<YOUR_ELASTIC_IP>
 
-# 2. Download & run setup
-curl -O https://raw.githubusercontent.com/anandmunotCode/AngelAlgo/aws-deploy/setup_ec2.sh
+# 2. Download & run setup from aws/ folder
+curl -O https://raw.githubusercontent.com/anandmunotCode/AngelAlgo/aws-deploy/aws/setup_ec2.sh
 chmod +x setup_ec2.sh
 ./setup_ec2.sh
 
@@ -28,23 +28,22 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 ┌─────────────────────────────────────────────────────────┐
 │                    AWS EC2 (Ubuntu)                      │
 │                                                         │
-│  ┌──────────┐    ┌──────────────┐    ┌───────────────┐ │
-│  │  Cron    │───>│ run_trading  │───>│  Trading      │ │
-│  │ 9:00 AM  │    │    .sh       │    │  Engine       │ │
-│  └──────────┘    └──────────────┘    │  (Python)     │ │
-│                         │            └───────┬───────┘ │
-│                         │                    │         │
-│  ┌──────────┐           │            ┌───────▼───────┐ │
-│  │ systemd  │ (auto     │            │  Angel One    │ │
-│  │ restart  │  restart   │            │  SmartAPI     │ │
-│  │ on crash)│  if crash) │            └───────────────┘ │
-│  └──────────┘           │                              │
-│                         ▼                              │
-│                  ┌──────────────┐                       │
-│                  │  Git Push    │                       │
-│                  │  positions   │──> GitHub (aws-deploy)│
-│                  │  + logs      │                       │
-│                  └──────────────┘                       │
+│  ┌──────────┐    ┌──────────────────┐ ┌───────────────┐│
+│  │  Cron    │───>│aws/run_trading.sh│>│  Trading      ││
+│  │ 9:00 AM  │    └──────────────────┘ │  Engine       ││
+│  └──────────┘             │           │  (Python)     ││
+│                           │           └───────┬───────┘│
+│  ┌──────────┐             │                   │        │
+│  │ systemd  │ (auto       │           ┌───────▼───────┐│
+│  │ restart  │  restart    │           │  Angel One    ││
+│  │ on crash)│  if crash)  │           │  SmartAPI     ││
+│  └──────────┘             │           └───────────────┘│
+│                           ▼                            │
+│                    ┌──────────────┐                    │
+│                    │  Git Push    │                    │
+│                    │  positions   │──> GitHub          │
+│                    │  + logs      │    (aws-deploy)    │
+│                    └──────────────┘                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -55,17 +54,17 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 | Time | What Happens |
 |------|-------------|
 | 9:00 AM | Cron triggers `systemctl start angelalgo` |
-| 9:00 AM | `run_trading.sh` pulls latest code, installs deps |
+| 9:00 AM | `aws/run_trading.sh` pulls latest code, installs deps |
 | 9:15 AM | Market opens, engine starts monitoring |
 | 9:18 AM | Entry window → positions taken |
 | 9:18 - 3:41 PM | Real-time monitoring + auto-adjustments |
 | 3:41 PM | Engine auto-stops (market close logic in code) |
-| 3:41 PM | Positions + logs pushed to GitHub |
+| 3:41 PM | Positions + logs pushed to GitHub (aws-deploy) |
 | 3:45 PM | Cron safety stop `systemctl stop angelalgo` |
 
 ---
 
-## Useful Commands
+## Useful Commands (EC2 pe)
 
 ```bash
 # Start algo manually
@@ -104,5 +103,3 @@ tail -f /home/ubuntu/AngelAlgo/logs/runner_$(date +%Y-%m-%d).log
 |--------|---------|
 | `main` | Local development, paper testing |
 | `aws-deploy` | AWS EC2 production deployment |
-
-**No merging between branches.** They are independent.
