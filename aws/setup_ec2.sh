@@ -28,9 +28,9 @@ cd /home/ubuntu
 if [ -d "AngelAlgo" ]; then
     echo "  → AngelAlgo folder already exists. Pulling latest..."
     cd AngelAlgo
-    git pull origin aws-deploy
+    git pull origin main
 else
-    git clone -b aws-deploy https://github.com/anandmunotCode/AngelAlgo.git
+    git clone -b main https://github.com/anandmunotCode/AngelAlgo.git
     cd AngelAlgo
 fi
 echo "  ✓ Repo ready at /home/ubuntu/AngelAlgo"

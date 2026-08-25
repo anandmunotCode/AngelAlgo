@@ -16,9 +16,9 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-# ─── 1. Pull latest code from aws-deploy branch ─────────────
+# ─── 1. Pull latest code from main branch ───────────────────
 log "Pulling latest code from GitHub..."
-git pull origin aws-deploy --quiet 2>/dev/null || log "WARNING: git pull failed, using local code"
+git pull origin main --quiet 2>/dev/null || log "WARNING: git pull failed, using local code"
 
 # ─── 2. Install/update dependencies (silent) ────────────────
 log "Checking dependencies..."
@@ -41,8 +41,8 @@ git add positions.json trade_log.csv logs/ instrument_master.json
 git diff --cached --quiet 2>/dev/null
 if [ $? -ne 0 ]; then
     git commit -m "Market close: final state ${DATE} $(date '+%H:%M') IST [skip ci]"
-    git push origin aws-deploy 2>&1 | tee -a "$LOG_FILE"
-    log "✓ State pushed to GitHub (aws-deploy branch)"
+    git push origin main 2>&1 | tee -a "$LOG_FILE"
+    log "✓ State pushed to GitHub (main branch)"
 else
     log "No changes to commit."
 fi

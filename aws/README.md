@@ -9,7 +9,7 @@ SSH into your EC2 instance and run:
 ssh -i "your-key.pem" ubuntu@<YOUR_ELASTIC_IP>
 
 # 2. Download & run setup from aws/ folder
-curl -O https://raw.githubusercontent.com/anandmunotCode/AngelAlgo/aws-deploy/aws/setup_ec2.sh
+curl -O https://raw.githubusercontent.com/anandmunotCode/AngelAlgo/main/aws/setup_ec2.sh
 chmod +x setup_ec2.sh
 ./setup_ec2.sh
 
@@ -42,7 +42,7 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 │                    ┌──────────────┐                    │
 │                    │  Git Push    │                    │
 │                    │  positions   │──> GitHub          │
-│                    │  + logs      │    (aws-deploy)    │
+│                    │  + logs      │    (main branch)   │
 │                    └──────────────┘                    │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -59,7 +59,7 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 | 9:18 AM | Entry window → positions taken |
 | 9:18 - 3:40 PM | Real-time monitoring + auto-adjustments |
 | 3:40 PM | Engine auto-stops (market close logic in code) |
-| 3:40 PM | Positions + logs pushed to GitHub (aws-deploy) |
+| 3:40 PM | Positions + logs pushed to GitHub (main) |
 | 3:42 PM | Cron safety stop `systemctl stop angelalgo` |
 
 ---
@@ -70,20 +70,20 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 # Start algo manually
 sudo systemctl start angelalgo
 
-# Stop algo
+# Stop algo manually
 sudo systemctl stop angelalgo
 
-# See live logs
-sudo journalctl -u angelalgo -f
-
-# Check algo status
+# Check status
 sudo systemctl status angelalgo
 
-# Check cron jobs
-crontab -l
+# View live trading logs (real-time stream)
+tail -f /home/ubuntu/AngelAlgo/logs/runner_$(date +%F).log
 
-# See today's trading log
-tail -f /home/ubuntu/AngelAlgo/logs/runner_$(date +%Y-%m-%d).log
+# View systemd logs
+sudo journalctl -u angelalgo -f
+
+# Check positions directly
+cat /home/ubuntu/AngelAlgo/positions.json | python3 -m json.tool
 ```
 
 ---

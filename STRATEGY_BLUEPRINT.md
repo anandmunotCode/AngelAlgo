@@ -138,18 +138,17 @@ The live production trading engine runs 24/7 on a dedicated **AWS EC2 Virtual Ma
 
 ---
 
-## 5. BRANCHING STRATEGY & REPOSITORY STRUCTURE
+## 5. REPOSITORY STRUCTURE & AWS AUTOMATION
 
-To maintain institutional cleanliness, the repository strictly isolates local development from cloud production:
+The repository maintains a unified, single production branch (`main`) containing both the core quantitative strategy and the AWS cloud automation infrastructure:
 
 | Branch | Environment | Purpose |
 |---|---|---|
-| `main` | Local Laptop / Dev | Code updates, backtesting, paper trading, and strategy experimentation. |
-| `aws-deploy` | AWS EC2 Cloud Production | Dedicated production deployment branch. Contains EC2 service & automation scripts. |
+| `main` | Production & Cloud | Single unified production repository powering AWS EC2, live trading, and automated state sync. |
 
-### Dedicated AWS Files (`aws/` folder on `aws-deploy` branch):
-* `aws/setup_ec2.sh` — One-time Ubuntu EC2 provisioning script (installs Python 3, dependencies, sets IST timezone, configures cron and systemd).
-* `aws/run_trading.sh` — Daily execution orchestrator (pulls latest `aws-deploy`, runs `--live` engine, pushes final state to GitHub on market close).
+### Dedicated AWS Production Files (`aws/` folder):
+* `aws/setup_ec2.sh` — Ubuntu EC2 provisioning script (installs Python 3, dependencies, sets IST timezone, configures cron and systemd).
+* `aws/run_trading.sh` — Daily execution orchestrator (pulls latest `main`, runs `--live` engine, pushes final state to GitHub on market close).
 * `aws/angelalgo.service` — Linux systemd service ensuring **zero downtime auto-restart within 10 seconds** if any unhandled error occurs.
 * `aws/README.md` — Full technical documentation for AWS commands and operations.
 
@@ -159,14 +158,16 @@ To maintain institutional cleanliness, the repository strictly isolates local de
 
 | Time (IST) | Component | Action |
 |---|---|---|
-| **09:00 AM** | Crontab | Triggers `sudo systemctl start angelalgo`. |
-| **09:00 AM** | `run_trading.sh` | Pulls latest code from `aws-deploy`, verifies Python packages. |
+| **08:55 AM** | AWS EventBridge | Auto Power-ON of EC2 Instance hardware. |
+| **09:00 AM** | Crontab / Systemd | Triggers `sudo systemctl start angelalgo`. |
+| **09:00 AM** | `run_trading.sh` | Pulls latest code from `main`, verifies Python packages. |
 | **09:15 AM** | Engine | Connects to Angel One WebSocket V2, begins live streaming. |
 | **09:18 AM** | Strategy | Initial entry window opens (if Wednesday / cycle start day). |
 | **09:18 → 15:40** | Strategy | Real-time monitoring, Greeks calculation, and 50% surge adjustments. |
 | **15:40 PM** | Engine | Market Close (CAS standard) — stops trading, saves state atomically. |
-| **15:40 PM** | `run_trading.sh` | Commits `positions.json`, `trade_log.csv`, and logs to GitHub (`aws-deploy`). |
+| **15:40 PM** | `run_trading.sh` | Commits `positions.json`, `trade_log.csv`, and logs to GitHub (`main`). |
 | **15:42 PM** | Crontab | Safety cleanup stop (`sudo systemctl stop angelalgo`). |
+| **15:45 PM** | AWS EventBridge | Auto Power-OFF (Stop) of EC2 Instance hardware to minimize compute costs. |
 
 ---
 
