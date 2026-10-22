@@ -524,24 +524,29 @@ class StrategyRunner:
                             self.pm.position["gap_breach_active"] = False
                             self.pm.save()
 
-        # ─── PRE-CLOSE OVERNIGHT SHIELD DEPLOYMENT (15:29 Expiry / 15:44 Non-Expiry) ──
-        if getattr(config, "OVERNIGHT_SHIELD_ENABLED", True) and self.pm.open_short_legs:
-            buy_hour, buy_minute = get_shield_buy_time(now.date())
-            if now.hour == buy_hour and now.minute >= buy_minute:
-                today_str = str(now.date())
-                if self.pm.position.get("last_shield_bought_date") != today_str:
-                    if not self.pm.open_overnight_hedge_legs:
-                        self._deploy_overnight_shield(spot, T)
-                        self.pm.position["last_shield_bought_date"] = today_str
-                        self.pm.save()
-
         # ─── EXPIRY DAY AUTO-SQUAREOFF (15:15 IST) ────────────────
-        if is_expiry_day(now.date()) or (self.expiry_date and now.date() >= self.expiry_date):
+        is_expiry_closing_today = (is_expiry_day(now.date()) or (self.expiry_date and now.date() >= self.expiry_date))
+        if is_expiry_closing_today:
             if now.hour == 15 and now.minute >= 15:
                 print_banner("EXPIRY DAY AUTO-SQUAREOFF (15:15 IST)")
                 logger.info(f"Expiry day ({self.expiry_date}) market auto-squareoff reached at 15:15 IST. Closing all positions.")
                 self._close_all_positions(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
                 return
+
+        # ─── PRE-CLOSE OVERNIGHT SHIELD DEPLOYMENT (NON-EXPIRY: 15:44 IST) ──
+        # On Tuesday expiry, positions are squared off at 15:15 IST, so no shield is carried into Wednesday.
+        # On Non-Expiry days (Wed, Thu, Fri, Mon), dynamic 100-pt gap hedges are bought at 15:44 IST.
+        if getattr(config, "OVERNIGHT_SHIELD_ENABLED", True) and not is_expiry_closing_today:
+            if self.pm.open_short_legs:
+                buy_hour = config.SHIELD_BUY_HOUR_NON_EXPIRY
+                buy_minute = config.SHIELD_BUY_MINUTE_NON_EXPIRY
+                if now.hour == buy_hour and now.minute >= buy_minute:
+                    today_str = str(now.date())
+                    if self.pm.position.get("last_shield_bought_date") != today_str:
+                        if not self.pm.open_overnight_hedge_legs:
+                            self._deploy_overnight_shield(spot, T)
+                            self.pm.position["last_shield_bought_date"] = today_str
+                            self.pm.save()
 
         # ─── GAP BREACH DEFENSE MODE (NO STRANGLE ADJUSTMENTS) ─────
         if self.pm.position.get("gap_breach_active"):
