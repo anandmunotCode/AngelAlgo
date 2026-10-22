@@ -11,7 +11,7 @@ import os
 LOT_SIZE = 65                      # Shares per lot
 NUM_LOTS = 1                       # Lots per entry
 STRIKE_GAP = 50                    # Nifty options strike interval
-CYCLE_START_DAY = 2                # Wednesday (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
+CYCLE_START_DAY = 4                # Friday (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri) - Temporarily set to Friday for paper testing
 WEEKLY_EXPIRY_DAY = 1              # Tuesday (Weekly expiry at 15:15 IST)
 
 # Nifty Spot Token (Angel One)

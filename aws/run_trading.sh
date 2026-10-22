@@ -24,12 +24,27 @@ git pull origin main --quiet 2>/dev/null || log "WARNING: git pull failed, using
 log "Checking dependencies..."
 pip3 install -r Delta_Neutral_Nifty/requirements.txt --quiet --break-system-packages 2>/dev/null
 
-# ─── 3. Start trading engine (LIVE mode) ────────────────────
-log "═══════════════════════════════════════════════════════════"
-log "  STARTING LIVE TRADING ENGINE"
-log "═══════════════════════════════════════════════════════════"
+# ─── 3. Start trading engine ───────────────────────────────
+# Default is PAPER trading (reads live market prices, simulated orders, zero real money risk).
+# Set TRADING_MODE=live in .env when ready for real broker orders.
+TRADING_MODE=${TRADING_MODE:-"paper"}
+if [ -f .env ]; then
+    set -a
+    source .env 2>/dev/null || true
+    set +a
+fi
 
-python3 -m Delta_Neutral_Nifty --live 2>&1 | tee -a "$LOG_FILE"
+if [ "$TRADING_MODE" = "live" ]; then
+    log "═══════════════════════════════════════════════════════════"
+    log "  STARTING LIVE TRADING ENGINE (REAL BROKER ORDERS)"
+    log "═══════════════════════════════════════════════════════════"
+    python3 -m Delta_Neutral_Nifty --live 2>&1 | tee -a "$LOG_FILE"
+else
+    log "═══════════════════════════════════════════════════════════"
+    log "  STARTING PAPER TRADING ENGINE (LIVE QUOTES, ZERO REAL ORDERS)"
+    log "═══════════════════════════════════════════════════════════"
+    python3 -m Delta_Neutral_Nifty 2>&1 | tee -a "$LOG_FILE"
+fi
 
 # ─── 4. After engine stops (market close) → Push to GitHub ──
 log "Trading engine stopped. Pushing state to GitHub..."
@@ -47,6 +62,9 @@ else
     log "No changes to commit."
 fi
 
+# ─── 5. Auto Power-Off EC2 to Save AWS Credits ──────────────
 log "═══════════════════════════════════════════════════════════"
-log "  SESSION COMPLETE"
+log "  SESSION COMPLETE - SHUTTING DOWN EC2 TO SAVE CREDITS"
 log "═══════════════════════════════════════════════════════════"
+
+sudo shutdown -h now 2>/dev/null || sudo poweroff 2>/dev/null || log "Warning: shutdown command failed"
