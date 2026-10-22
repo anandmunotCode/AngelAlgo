@@ -33,10 +33,36 @@ DEFAULT_MARGIN_PER_LOT_IC = 65000.0    # Approximate exchange margin for 4-leg h
 DEFAULT_MARGIN_PER_LOT_STRADDLE = 95000.0 # Approximate exchange margin for 4-leg Straddle
 
 # ═══════════════════════════════════════════════════════════════
-# STRATEGY ENTRY PARAMETERS
+# STRATEGY ENTRY & DAYTIME EXECUTION
 # ═══════════════════════════════════════════════════════════════
 ENTRY_DELTA = 0.15                     # Short strangle legs (sell at this delta / nearest)
-HEDGE_DELTA = 0.05                     # Protective wings (buy at this delta / nearest)
+DAYTIME_HEDGES_ENABLED = False         # False = Pure Short Strangle during day (100% Theta decay)
+HEDGE_DELTA = 0.05                     # Fallback wing delta if daytime hedges are ever toggled on
+
+# ═══════════════════════════════════════════════════════════════
+# OVERNIGHT SHIELD (FAT-TAIL GAP PROTECTION - 100 PT WING)
+# ═══════════════════════════════════════════════════════════════
+# Buys dynamic 100-point OTM Call and Put hedges from active open short strikes:
+# - Expiry Days: Bought at 15:29 IST (1 min before 15:30 close)
+# - Non-Expiry Days: Bought at 15:44 IST (1 min before 15:45 close)
+# - Next Morning 09:15 IST:
+#   * If any short leg breached ITM: Hedges retained (Iron Condor armor active)
+#     to cap max loss (~Rs.4,940); position held for 2 hours before clean exit.
+#   * If both short legs remain OTM: Hedges unwound dot 09:15 IST; resumes pure strangle.
+OVERNIGHT_SHIELD_ENABLED = True
+OVERNIGHT_SHIELD_WING_PTS = 100         # 100-point gap from active open short strikes (Call+100, Put-100)
+OVERNIGHT_SHIELD_QTY_MULTIPLIER = 1.0   # 1.0x quantity (equal to short legs, e.g. 65 shares per lot)
+
+# SEBI CAS / Exchange Closing Timings for Overnight Shield:
+SHIELD_BUY_HOUR_EXPIRY = 15
+SHIELD_BUY_MINUTE_EXPIRY = 29          # 15:29 IST on weekly/monthly expiry days
+SHIELD_BUY_HOUR_NON_EXPIRY = 15
+SHIELD_BUY_MINUTE_NON_EXPIRY = 44      # 15:44 IST on regular non-expiry trading days
+
+# Morning Evaluation & Unwind:
+OVERNIGHT_SHIELD_SELL_HOUR = 9
+OVERNIGHT_SHIELD_SELL_MINUTE = 15      # Dot 09:15 IST morning opening check
+GAP_BREACH_HOLD_HOURS = 2.0            # If short leg breached ITM, hold Iron Condor for 2 hrs before squareoff
 
 # ═══════════════════════════════════════════════════════════════
 # DYNAMIC ADJUSTMENT TRIGGERS (ACTIVE IN NON-STRADDLE PHASE)
@@ -53,7 +79,7 @@ STRADDLE_SPOT_SL_PCT = 0.0125          # Exit if Nifty moves >= 1.25% from Strad
 # ═══════════════════════════════════════════════════════════════
 # Jane Street operates tick-by-tick. With retail API constraints:
 # - WebSocket for spot price: real-time (sub-second)
-# - Option chain LTP refresh: every 5 seconds via REST
+# - Option chain LTP refresh: every 2 seconds via REST
 # - Greeks recalculation: on every LTP refresh
 # - Adjustment decision: on every Greeks refresh
 OPTION_CHAIN_REFRESH_SECONDS = 2   # Refresh option chain every 2s to strictly comply with Angel REST limits
@@ -62,18 +88,26 @@ WEBSOCKET_RECONNECT_SECONDS = 3    # Auto-reconnect WebSocket if dropped
 FALLBACK_POLL_SECONDS = 3          # REST polling if WebSocket fails
 
 # ═══════════════════════════════════════════════════════════════
-# MARKET HOURS (IST)
+# MARKET HOURS (IST) - SEBI CAS EXTENDED TIMINGS
 # ═══════════════════════════════════════════════════════════════
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MINUTE = 15
+
+# Dynamic Session Close (Expiry vs Non-Expiry):
+MARKET_CLOSE_HOUR_EXPIRY = 15
+MARKET_CLOSE_MINUTE_EXPIRY = 30        # 15:30 IST on expiry day
+MARKET_CLOSE_HOUR_NON_EXPIRY = 15
+MARKET_CLOSE_MINUTE_NON_EXPIRY = 45    # 15:45 IST on non-expiry day
+
+# Fallback environment overrides
 MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", 15))
-MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 40))
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 45))
 
 # Wait after market open for initial volatility to settle
 ENTRY_DELAY_MINUTES = 3            # Enter at 09:18 (3 mins after open)
 
 # Stop new entries this many minutes before close
-CLOSE_BUFFER_MINUTES = 15          # No new entries after 15:15
+CLOSE_BUFFER_MINUTES = 15          # No new entries after 15:15 / 15:30
 
 # ═══════════════════════════════════════════════════════════════
 # BLACK-SCHOLES MODEL PARAMETERS

@@ -55,12 +55,14 @@ git remote set-url origin https://<YOUR_GITHUB_PAT>@github.com/anandmunotCode/An
 |------|-------------|
 | 9:00 AM | Cron triggers `systemctl start angelalgo` |
 | 9:00 AM | `aws/run_trading.sh` pulls latest code, installs deps |
-| 9:15 AM | Market opens, engine starts monitoring |
-| 9:18 AM | Entry window → positions taken |
-| 9:18 - 3:40 PM | Real-time monitoring + auto-adjustments |
-| 3:40 PM | Engine auto-stops (market close logic in code) |
-| 3:40 PM | Positions + logs pushed to GitHub (main) |
-| 3:42 PM | Cron safety stop `systemctl stop angelalgo` |
+| 9:15 AM | Market opens: Evaluates opening gap breach vs short legs |
+| 9:15 AM | If normal: Unwinds overnight shield; If gap breach: Retains Iron Condor armor |
+| 9:18 AM | Wed entry window → new cycle positions taken (if clean start) |
+| 9:18 - Close | Real-time tick monitoring + 50% surge auto-adjustments |
+| 3:29 PM / 3:44 PM | Overnight Shield: Dynamic 100-pt gap hedges bought (3:29 Expiry / 3:44 Non-Expiry) |
+| 3:30 PM / 3:45 PM | Session close: Engine cleanly exits after market close |
+| Post-Close | Positions + logs automatically committed & pushed to GitHub (main) |
+| 3:50 PM | Cron safety stop `systemctl stop angelalgo` |
 
 ---
 

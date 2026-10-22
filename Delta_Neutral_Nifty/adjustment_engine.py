@@ -196,28 +196,56 @@ class AdjustmentEngine:
             logger.error("Could not find suitable strike for new short leg!")
             return False
 
-        # Step 4: Find new hedge strike matching the LOSING HEDGE'S CURRENT DELTA (Dynamic Symmetrical Wing)
-        losing_hedge = action.get("losing_hedge")
-        if losing_hedge and losing_hedge.get("current_delta"):
-            target_hedge_delta = abs(float(losing_hedge.get("current_delta")))
-        else:
-            target_hedge_delta = config.HEDGE_DELTA
+        # Step 4: Conditionally handle daytime hedge (only if DAYTIME_HEDGES_ENABLED is True)
+        new_hedge_strike = 0.0
+        new_hedge_delta = 0.0
+        new_hedge_iv = 0.0
+        new_hedge_premium = 0.0
 
-        new_hedge_strike, new_hedge_delta, new_hedge_iv, new_hedge_premium = \
-            greeks_engine.find_strike_at_delta(
-                side_ltps, spot, target_hedge_delta, profitable_side, T
+        if getattr(config, "DAYTIME_HEDGES_ENABLED", False):
+            losing_hedge = action.get("losing_hedge")
+            if losing_hedge and losing_hedge.get("current_delta"):
+                target_hedge_delta = abs(float(losing_hedge.get("current_delta")))
+            else:
+                target_hedge_delta = config.HEDGE_DELTA
+
+            new_hedge_strike, new_hedge_delta, new_hedge_iv, new_hedge_premium = \
+                greeks_engine.find_strike_at_delta(
+                    side_ltps, spot, target_hedge_delta, profitable_side, T
+                )
+
+            if new_hedge_strike is None:
+                logger.error("Could not find suitable strike for new hedge!")
+                return False
+
+            # Place new hedge leg FIRST (Hedge-First for Margin Benefit)
+            hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side) if self.api else None
+            hedge_token = hedge_token_info["token"] if hedge_token_info else ""
+            hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
+
+            if not paper_mode and hedge_token_info and self.api:
+                hedge_order_id = self.api.place_order(
+                    hedge_symbol, hedge_token, "BUY",
+                    config.LOT_SIZE * config.NUM_LOTS
+                )
+                if hedge_order_id is None:
+                    logger.error(f"[ADJ ABORTED] Could not place new hedge BUY @ {new_hedge_strike}. Adjustment incomplete!")
+                    return False
+
+            hedge_leg_type = f"LONG_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
+            self.pm.add_leg(
+                leg_type=hedge_leg_type,
+                strike=new_hedge_strike,
+                option_type=profitable_side,
+                delta_at_entry=new_hedge_delta,
+                iv_at_entry=new_hedge_iv,
+                entry_premium=new_hedge_premium,
+                symbol_token=hedge_token,
+                trading_symbol=hedge_symbol,
+                is_hedge=True,
             )
 
-        if new_hedge_strike is None:
-            logger.error("Could not find suitable strike for new hedge!")
-            return False
-
-        logger.info(
-            f"  [FULL 4-LEG MATCH] New {profitable_side} Short={new_short_strike} (Δ={new_short_delta:.4f}) | "
-            f"Hedge={new_hedge_strike} (Δ={new_hedge_delta:.4f}) → Net Portfolio Delta = 0.00"
-        )
-
-        # Check straddle BEFORE placing new legs
+        # Check straddle BEFORE placing new short leg
         would_be_straddle = abs(new_short_strike - losing_leg["strike"]) <= config.STRADDLE_PROXIMITY_PTS
 
         if would_be_straddle:
@@ -226,34 +254,7 @@ class AdjustmentEngine:
                 f"Losing strike {losing_leg['strike']} → STRADDLE REACHED"
             )
 
-        # Step 5: Place new hedge leg FIRST (Hedge-First for Margin Benefit)
-        hedge_token_info = self.api.get_token_info(self.expiry_date, new_hedge_strike, profitable_side) if self.api else None
-        hedge_token = hedge_token_info["token"] if hedge_token_info else ""
-        hedge_symbol = hedge_token_info["symbol"] if hedge_token_info else f"NIFTY_{int(new_hedge_strike)}_{profitable_side}"
-
-        if not paper_mode and hedge_token_info and self.api:
-            hedge_order_id = self.api.place_order(
-                hedge_symbol, hedge_token, "BUY",
-                config.LOT_SIZE * config.NUM_LOTS
-            )
-            if hedge_order_id is None:
-                logger.error(f"[ADJ ABORTED] Could not place new hedge BUY @ {new_hedge_strike}. Adjustment incomplete!")
-                return False
-
-        hedge_leg_type = f"LONG_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
-        self.pm.add_leg(
-            leg_type=hedge_leg_type,
-            strike=new_hedge_strike,
-            option_type=profitable_side,
-            delta_at_entry=new_hedge_delta,
-            iv_at_entry=new_hedge_iv,
-            entry_premium=new_hedge_premium,
-            symbol_token=hedge_token,
-            trading_symbol=hedge_symbol,
-            is_hedge=True,
-        )
-
-        # Step 6: Place new short leg SECOND
+        # Step 5: Place new short leg
         token_info = self.api.get_token_info(self.expiry_date, new_short_strike, profitable_side) if self.api else None
         short_token = token_info["token"] if token_info else ""
         short_symbol = token_info["symbol"] if token_info else f"NIFTY_{int(new_short_strike)}_{profitable_side}"
@@ -264,7 +265,7 @@ class AdjustmentEngine:
                 config.LOT_SIZE * config.NUM_LOTS
             )
             if short_order_id is None:
-                logger.error(f"[ADJ ABORTED] Could not place new short SELL @ {new_short_strike}. Hedge already placed - manual review needed!")
+                logger.error(f"[ADJ ABORTED] Could not place new short SELL @ {new_short_strike}! Manual review needed.")
                 return False
 
         short_leg_type = f"SHORT_{profitable_side.replace('CE', 'CALL').replace('PE', 'PUT')}"
@@ -280,7 +281,7 @@ class AdjustmentEngine:
             is_hedge=False,
         )
 
-        # Step 7: Reset losing short leg's surge baseline to its CURRENT price
+        # Step 6: Reset losing short leg's surge baseline to its CURRENT price
         # The next adjustment will ONLY trigger if it expands ANOTHER 50% from this new level!
         self.pm.update_surge_baseline(losing_leg["id"], losing_leg["current_premium"])
         logger.info(
@@ -308,14 +309,84 @@ class AdjustmentEngine:
             f"  New SHORT {profitable_side} @ {new_short_strike} (Δ={new_short_delta:.4f}, "
             f"Prem={new_short_premium:.2f})"
         )
-        logger.info(
-            f"  New HEDGE {profitable_side} @ {new_hedge_strike} (Δ={new_hedge_delta:.4f}, "
-            f"Prem={new_hedge_premium:.2f})"
-        )
+        if getattr(config, "DAYTIME_HEDGES_ENABLED", False):
+            logger.info(
+                f"  New HEDGE {profitable_side} @ {new_hedge_strike} (Δ={new_hedge_delta:.4f}, "
+                f"Prem={new_hedge_premium:.2f})"
+            )
         logger.info(f"  Adjustment P&L booked: {format_pnl(pnl_short + pnl_hedge)}")
         logger.info("=" * 65)
 
         return True
+
+    def calculate_overnight_shield(self, spot, T, option_chain_ltps):
+        """
+        Calculate dynamic 100-point OTM hedge strikes and quantities.
+        Rule:
+          - Reads current open short Call and Put strikes (regardless of how many times adjusted).
+          - Target CE Hedge Strike = Short Call Strike + 100 pts.
+          - Target PE Hedge Strike = Short Put Strike - 100 pts.
+          - Target Quantity = 1.0x (same as short legs = LOT_SIZE * NUM_LOTS).
+        """
+        short_calls = self.pm.short_call_legs
+        short_puts = self.pm.short_put_legs
+        if not short_calls or not short_puts:
+            return None
+
+        short_ce = short_calls[-1]
+        short_pe = short_puts[-1]
+
+        wing_pts = getattr(config, "OVERNIGHT_SHIELD_WING_PTS", 100)
+        ce_h_strike = float(short_ce["strike"] + wing_pts)
+        pe_h_strike = float(short_pe["strike"] - wing_pts)
+
+        ce_chain = option_chain_ltps.get("CE", {})
+        pe_chain = option_chain_ltps.get("PE", {})
+        r = config.RISK_FREE_RATE
+
+        # Call hedge premium & Greeks
+        ce_h_prem = float(ce_chain.get(ce_h_strike, 0.0))
+        if ce_h_prem > 0:
+            ce_h_iv = greeks_engine.implied_volatility(ce_h_prem, spot, ce_h_strike, T, r, "CE")
+            ce_h_delta = greeks_engine.all_greeks(spot, ce_h_strike, T, r, ce_h_iv, "CE")["delta"]
+        else:
+            ce_h_iv = float(short_ce.get("current_iv", 0.15))
+            ce_h_prem = greeks_engine.bs_price(spot, ce_h_strike, T, r, ce_h_iv, "CE")
+            ce_h_delta = greeks_engine.all_greeks(spot, ce_h_strike, T, r, ce_h_iv, "CE")["delta"]
+
+        # Put hedge premium & Greeks
+        pe_h_prem = float(pe_chain.get(pe_h_strike, 0.0))
+        if pe_h_prem > 0:
+            pe_h_iv = greeks_engine.implied_volatility(pe_h_prem, spot, pe_h_strike, T, r, "PE")
+            pe_h_delta = greeks_engine.all_greeks(spot, pe_h_strike, T, r, pe_h_iv, "PE")["delta"]
+        else:
+            pe_h_iv = float(short_pe.get("current_iv", 0.15))
+            pe_h_prem = greeks_engine.bs_price(spot, pe_h_strike, T, r, pe_h_iv, "PE")
+            pe_h_delta = greeks_engine.all_greeks(spot, pe_h_strike, T, r, pe_h_iv, "PE")["delta"]
+
+        multiplier = getattr(config, "OVERNIGHT_SHIELD_QTY_MULTIPLIER", 1.0)
+        num_lots = max(1, int(round(config.NUM_LOTS * multiplier)))
+        hedge_qty = num_lots * config.LOT_SIZE
+
+        return {
+            "CE": {
+                "strike": ce_h_strike,
+                "delta": ce_h_delta,
+                "iv": ce_h_iv,
+                "premium": ce_h_prem,
+                "quantity": hedge_qty,
+            },
+            "PE": {
+                "strike": pe_h_strike,
+                "delta": pe_h_delta,
+                "iv": pe_h_iv,
+                "premium": pe_h_prem,
+                "quantity": hedge_qty,
+            },
+            "num_lots": num_lots,
+            "hedge_qty": hedge_qty,
+        }
+
 
     # ─── HELPERS ──────────────────────────────────────────────────
 

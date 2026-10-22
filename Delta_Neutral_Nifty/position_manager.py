@@ -32,6 +32,8 @@ class PositionManager:
             "total_premium_collected": 0.0,
             "total_premium_paid": 0.0,
             "status": "PENDING",
+            "last_shield_bought_date": "",
+            "last_shield_unwound_date": "",
             "legs": [],
             "adjustments": [],
         }
@@ -69,17 +71,19 @@ class PositionManager:
     # ─── LEG MANAGEMENT ──────────────────────────────────────────
 
     def add_leg(self, leg_type, strike, option_type, delta_at_entry, iv_at_entry,
-                entry_premium, symbol_token, trading_symbol, is_hedge=False):
+                entry_premium, symbol_token, trading_symbol, is_hedge=False,
+                quantity=None, is_overnight_hedge=False):
         """
         Add a new leg to the position.
         leg_type: SHORT_CALL, SHORT_PUT, LONG_CALL, LONG_PUT
         """
+        qty = int(quantity) if (quantity is not None and quantity > 0) else (config.LOT_SIZE * config.NUM_LOTS)
         leg = {
             "id": str(uuid.uuid4())[:8],
             "leg_type": leg_type,
             "strike": float(strike),
             "option_type": option_type,
-            "quantity": config.LOT_SIZE * config.NUM_LOTS,
+            "quantity": qty,
             "delta_at_entry": float(delta_at_entry),
             "iv_at_entry": float(iv_at_entry),
             "entry_premium": float(entry_premium),
@@ -91,6 +95,7 @@ class PositionManager:
             "trading_symbol": trading_symbol,
             "status": "OPEN",
             "is_hedge": is_hedge,
+            "is_overnight_hedge": is_overnight_hedge,
             "exit_premium": 0.0,
             "exit_time": "",
             "pnl": 0.0,
@@ -102,10 +107,10 @@ class PositionManager:
         else:
             self.position["total_premium_collected"] += entry_premium
 
+        tag = "OVERNIGHT_HEDGE" if is_overnight_hedge else ("HEDGE" if is_hedge else "SHORT")
         logger.info(
-            f"[+LEG] {leg_type} {option_type} @ {strike} | "
-            f"Δ={delta_at_entry:+.4f} | Premium={entry_premium:.2f} | "
-            f"{'HEDGE' if is_hedge else 'SHORT'}"
+            f"[+LEG] {leg_type} {option_type} @ {strike} (Qty: {qty}) | "
+            f"Δ={delta_at_entry:+.4f} | Premium={entry_premium:.2f} | {tag}"
         )
         self.save()
         self._log_trade(leg, "ENTRY", is_entry=True)
@@ -127,16 +132,17 @@ class PositionManager:
                 leg["exit_premium"] = float(exit_premium)
                 leg["exit_time"] = now_ist().strftime("%Y-%m-%d %H:%M:%S")
 
-                # P&L calculation
+                # P&L calculation respecting individual leg quantity
+                qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
                 if leg["is_hedge"]:
                     # Long leg: profit = exit - entry
-                    leg["pnl"] = (exit_premium - leg["entry_premium"]) * config.LOT_SIZE * config.NUM_LOTS
+                    leg["pnl"] = (exit_premium - leg["entry_premium"]) * qty
                 else:
                     # Short leg: profit = entry - exit
-                    leg["pnl"] = (leg["entry_premium"] - exit_premium) * config.LOT_SIZE * config.NUM_LOTS
+                    leg["pnl"] = (leg["entry_premium"] - exit_premium) * qty
 
                 logger.info(
-                    f"[-LEG] CLOSED {leg['leg_type']} {leg['option_type']} @ {leg['strike']} | "
+                    f"[-LEG] CLOSED {leg['leg_type']} {leg['option_type']} @ {leg['strike']} (Qty: {qty}) | "
                     f"Entry={leg['entry_premium']:.2f} -> Exit={exit_premium:.2f} | "
                     f"P&L={format_pnl(leg['pnl'])} | Reason: {reason}"
                 )
@@ -233,6 +239,11 @@ class PositionManager:
     def open_hedge_legs(self):
         """Get open hedge (bought) legs only."""
         return [l for l in self.open_legs if l["is_hedge"]]
+
+    @property
+    def open_overnight_hedge_legs(self):
+        """Get open overnight hedge legs (both is_overnight_hedge and generic is_hedge)."""
+        return [l for l in self.open_legs if l.get("is_overnight_hedge") or l.get("is_hedge")]
 
     @property
     def short_call_legs(self):
@@ -443,10 +454,11 @@ class PositionManager:
         """Total unrealized P&L from open legs."""
         pnl = 0.0
         for leg in self.open_legs:
+            qty = leg.get("quantity") or (config.LOT_SIZE * config.NUM_LOTS)
             if leg["is_hedge"]:
-                pnl += (leg["current_premium"] - leg["entry_premium"]) * config.LOT_SIZE * config.NUM_LOTS
+                pnl += (leg["current_premium"] - leg["entry_premium"]) * qty
             else:
-                pnl += (leg["entry_premium"] - leg["current_premium"]) * config.LOT_SIZE * config.NUM_LOTS
+                pnl += (leg["entry_premium"] - leg["current_premium"]) * qty
         return pnl
 
     @property

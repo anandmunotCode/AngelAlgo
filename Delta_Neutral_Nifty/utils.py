@@ -50,18 +50,51 @@ def now_ist():
     return datetime.now(IST)
 
 
+def get_market_close_time(check_date=None):
+    """
+    Get (hour, minute) for market close based on SEBI CAS rules:
+    - Expiry day: 15:30 IST
+    - Non-expiry day: 15:45 IST
+    """
+    if check_date is None:
+        check_date = now_ist().date()
+    elif isinstance(check_date, datetime):
+        check_date = check_date.date()
+
+    if is_expiry_day(check_date):
+        return (config.MARKET_CLOSE_HOUR_EXPIRY, config.MARKET_CLOSE_MINUTE_EXPIRY)
+    return (config.MARKET_CLOSE_HOUR_NON_EXPIRY, config.MARKET_CLOSE_MINUTE_NON_EXPIRY)
+
+
+def get_shield_buy_time(check_date=None):
+    """
+    Get (hour, minute) for deploying overnight shield:
+    - Expiry day: 15:29 IST (1 min before 15:30 close)
+    - Non-expiry day: 15:44 IST (1 min before 15:45 close)
+    """
+    if check_date is None:
+        check_date = now_ist().date()
+    elif isinstance(check_date, datetime):
+        check_date = check_date.date()
+
+    if is_expiry_day(check_date):
+        return (config.SHIELD_BUY_HOUR_EXPIRY, config.SHIELD_BUY_MINUTE_EXPIRY)
+    return (config.SHIELD_BUY_HOUR_NON_EXPIRY, config.SHIELD_BUY_MINUTE_NON_EXPIRY)
+
+
 def is_market_open(dt=None):
-    """Check if given datetime is within market hours (09:15 - 15:30 IST)."""
+    """Check if given datetime is within market hours (09:15 - 15:30 on expiry, 15:45 on non-expiry IST)."""
     if dt is None:
         dt = now_ist()
+    close_h, close_m = get_market_close_time(dt.date())
     market_open = dt.replace(
         hour=config.MARKET_OPEN_HOUR,
         minute=config.MARKET_OPEN_MINUTE,
         second=0, microsecond=0
     )
     market_close = dt.replace(
-        hour=config.MARKET_CLOSE_HOUR,
-        minute=config.MARKET_CLOSE_MINUTE,
+        hour=close_h,
+        minute=close_m,
         second=0, microsecond=0
     )
     return market_open <= dt <= market_close
@@ -71,6 +104,7 @@ def is_entry_window(dt=None):
     """Check if within safe entry window (after delay, before close buffer)."""
     if dt is None:
         dt = now_ist()
+    close_h, close_m = get_market_close_time(dt.date())
     entry_start = dt.replace(
         hour=config.MARKET_OPEN_HOUR,
         minute=config.MARKET_OPEN_MINUTE,
@@ -78,8 +112,8 @@ def is_entry_window(dt=None):
     ) + timedelta(minutes=config.ENTRY_DELAY_MINUTES)
 
     entry_end = dt.replace(
-        hour=config.MARKET_CLOSE_HOUR,
-        minute=config.MARKET_CLOSE_MINUTE,
+        hour=close_h,
+        minute=close_m,
         second=0, microsecond=0
     ) - timedelta(minutes=config.CLOSE_BUFFER_MINUTES)
 
