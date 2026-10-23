@@ -22,7 +22,7 @@ git pull origin main --quiet 2>/dev/null || log "WARNING: git pull failed, using
 
 # ─── 2. Install/update dependencies (silent) ────────────────
 log "Checking dependencies..."
-pip3 install -r Delta_Neutral_Nifty/requirements.txt --quiet --break-system-packages 2>/dev/null
+pip3 install -r Delta_Neutral_Nifty/requirements.txt --quiet 2>/dev/null || pip3 install -r Delta_Neutral_Nifty/requirements.txt --quiet --break-system-packages 2>/dev/null || true
 
 # ─── 3. Start trading engine ───────────────────────────────
 # Default is PAPER trading (reads live market prices, simulated orders, zero real money risk).
