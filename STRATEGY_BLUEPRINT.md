@@ -13,11 +13,11 @@ Option selling mein sabse bada darr hota hai **Overnight Fat-Tail Gap Risk**:
 2. **Raat ke Black Swan Gap ka khatra:** Raat ko market closed hota hai. Agar koi badi global news aayi, toh agle din market 300–500 points ka direct discrete jump karta hai. Aise discrete opening gap mein market seedha stop-loss jump kar jata hai (₹30 ka option seedha ₹150 par khulta hai bina beech ke prices touch kiye).
 
 ### Hamara 2-Regime Solution (Daytime Harvest + Overnight 100-Pt Armor)
-1. **Din Bhar (09:15 AM – 15:44 PM): Pure Theta Harvest Mode (Unhedged Strangle)**
+1. **Din Bhar (09:15 AM – 15:39 PM): Pure Theta Harvest Mode (Unhedged Strangle)**
    * Din mein koi hedge drag nahi hota. 100% time decay hamare account mein collect hota hai.
    * Tick-by-tick real-time monitoring: jab market trend karta hai aur losing short leg ka premium **50% surge** karta hai, algo automatically winning side ko profit mein book karta hai aur inward roll karke Net Delta ko 0.00 restore karta hai.
-2. **Shaam ko (15:29 Expiry / 15:44 Non-Expiry): Dynamic 100-Point Overnight Shield**
-   * Market band hone se theek 1 minute pehle, algo active open short strikes ko check karta hai (chahe din bhar mein kitne bhi adjustments hue hon).
+2. **Shaam ko 15:39 IST (1 Min Before 15:40 F&O Close): Dynamic 100-Point Overnight Shield**
+   * Market band hone se theek 1 minute pehle (**15:39 IST**), algo active open short strikes ko check karta hai (chahe din bhar mein kitne bhi adjustments hue hon).
    * Exact **100-point gap** par Call aur Put dono taraf equal quantity (1.0x = 65 shares) ka OTM hedge BUY kar leta hai:
      * CE Hedge Strike = Active Short CE Strike + 100
      * PE Hedge Strike = Active Short PE Strike - 100
@@ -65,16 +65,16 @@ Option selling mein sabse bada darr hota hai **Overnight Fat-Tail Gap Risk**:
 | **Overnight Shield Distance** | 100 points (`OVERNIGHT_SHIELD_WING_PTS = 100`) | CE: Short CE + 100, PE: Short PE - 100 |
 | **Shield Quantity Multiplier** | 1.0x (`OVERNIGHT_SHIELD_QTY_MULTIPLIER = 1.0`) | 65 shares (equal to short leg quantity) |
 | **Shield Deploy Timing (Expiry)** | 15:29 IST (`SHIELD_BUY_MINUTE_EXPIRY = 29`) | 1 min before 15:30 close on expiry days |
-| **Shield Deploy Timing (Non-Expiry)** | 15:44 IST (`SHIELD_BUY_MINUTE_NON_EXPIRY = 44`) | 1 min before 15:45 close on non-expiry days |
+| **Shield Deploy Timing (Non-Expiry)** | 15:39 IST (`SHIELD_BUY_MINUTE_NON_EXPIRY = 39`) | Exactly 1 min before 15:40 F&O close |
 | **Morning Evaluation Time** | 09:15 IST (`OVERNIGHT_SHIELD_SELL_MINUTE = 15`) | Dot market open evaluation |
 | **Gap Breach Protection Hold** | 2.0 Hours (`GAP_BREACH_HOLD_HOURS = 2.0`) | Hold Iron Condor armor for 2 hrs if short leg breached ITM |
 | **Straddle Convergence Setting** | `STRADDLE_PROXIMITY_PTS = 0` | When Short Call Strike == Short Put Strike |
-| **Capital Stop Loss** | 2.0% of Deployed Capital | Hard exit if total loss exceeds 2% of utilized margin |
+| **Capital Stop Loss** | 2.0% of Dynamic Capital Base | Hard exit if total loss exceeds 2% of allocated capital |
 | **Straddle Spot Breaker** | 1.25% Spot Distance | Hard exit if Nifty moves $\ge 1.25\%$ from straddle strike |
 | **Straddle Profit Target** | 70% Combined Theta Decay | Full exit when straddle premium decays by $\ge 70\%$ |
 | **OTM Full Decay Target** | Both short legs $\le ₹1.00$ | 100% profit capture if never converged to straddle |
-| **Market Close (Expiry Day)** | 15:30 IST | SEBI CAS rule for expiring index contracts |
-| **Market Close (Non-Expiry Day)** | 15:45 IST | SEBI CAS rule for non-expiring index contracts |
+| **Market Close (Expiry Day)** | 15:30 IST | Settlement timing for expiring index contracts |
+| **Market Close (Non-Expiry Day)** | 15:40 IST | NSE Equity Derivatives Session Close |
 
 ---
 
@@ -82,14 +82,14 @@ Option selling mein sabse bada darr hota hai **Overnight Fat-Tail Gap Risk**:
 
 ```mermaid
 flowchart TD
-    W["<b>Wednesday 09:18 AM</b><br>Initial Entry: Sell 0.15Δ CE + Sell 0.15Δ PE<br>(Pure Strangle / 100% Theta)"] --> D["<b>Daytime Harvest (09:15 - 15:44)</b><br>Monitor Greeks & LTPs tick-by-tick<br>Zero daytime hedge drag"]
+    W["<b>Wednesday 09:18 AM</b><br>Initial Entry: Sell 0.15Δ CE + Sell 0.15Δ PE<br>(Pure Strangle / 100% Theta)"] --> D["<b>Daytime Harvest (09:15 - 15:39)</b><br>Monitor Greeks & LTPs tick-by-tick<br>Zero daytime hedge drag"]
     
     D --> S{"Losing Leg Surges >= 50%?"}
     S -- "Yes" --> ADJ["<b>Dynamic Adjustment</b><br>1. Book profit on winning short leg<br>2. Roll inward: Sell new short matching losing delta<br>3. Reset losing surge baseline"]
     ADJ --> ST{"Call Strike == Put Strike?"}
-    ST -- "Yes" --> STRADDLE["<b>Straddle Defense Mode</b><br>• Stop strike rolling<br>• 2.0% Capital Stop Loss<br>• 1.25% Spot Breaker<br>• 70% Decay Target"]
+    ST -- "Yes" --> STRADDLE["<b>Straddle Infinity Armor</b><br>• Deploy 1x2 Ratio Armor<br>• Lock wings & trend rider<br>• 2.0% Capital Stop Loss<br>• 70% Decay Target"]
     ST -- "No" --> D
-    S -- "No" --> PRECLOSE{"Pre-Close Time?<br>(15:29 Expiry / 15:44 Normal)"}
+    S -- "No" --> PRECLOSE{"Pre-Close Time?<br>(15:39 Normal / 15:29 Expiry)"}
     
     PRECLOSE -- "Yes" --> SHIELD["<b>Deploy 100-pt Overnight Shield</b><br>BUY CE Hedge: Short CE Strike + 100<br>BUY PE Hedge: Short PE Strike - 100<br>(Quantity: 1.0x = 65 shares)"]
     SHIELD --> NIGHT["<b>Overnight Session</b><br>Defined-Risk Iron Condor Active<br>Max Loss Mathematically Capped at ₹4,940"]
@@ -130,9 +130,9 @@ flowchart TD
 1. **Dynamic Strike Detection:** Algo open short legs ko dekhta hai:
    - Call Hedge Strike = `Current Short CE Strike + 100`
    - Put Hedge Strike = `Current Short PE Strike - 100`
-2. **Timing (SEBI CAS Rules):**
-   - **Weekly Expiry Days (Tuesday):** Theek **15:29 IST** par deploy hota hai.
-   - **Regular Trading Days (Mon, Wed, Thu, Fri):** Theek **15:44 IST** par deploy hota hai.
+2. **Timing (NSE CAS F&O Rules):**
+   - **Weekly Expiry Days (Tuesday):** Theek **15:15 IST** par position auto-squareoff ho jaati hai (cycle end).
+   - **Regular Trading Days (Mon, Wed, Thu, Fri):** Theek **15:39 IST** par deploy hota hai (exactly 1 minute before 15:40 F&O close).
 3. **Quantity:** 1.0x (65 shares = short leg quantity).
 
 ### Phase 4: Subah 09:15 AM Opening Protocol (ITM Gap Check)

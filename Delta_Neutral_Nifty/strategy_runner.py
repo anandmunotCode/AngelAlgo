@@ -535,9 +535,9 @@ class StrategyRunner:
                 self._close_all_positions(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
                 return
 
-        # ─── PRE-CLOSE OVERNIGHT SHIELD DEPLOYMENT (NON-EXPIRY: 15:44 IST) ──
+        # ─── PRE-CLOSE OVERNIGHT SHIELD DEPLOYMENT (NON-EXPIRY: 15:39 IST) ──
         # On Tuesday expiry, positions are squared off at 15:15 IST, so no shield is carried into Wednesday.
-        # On Non-Expiry days (Wed, Thu, Fri, Mon), dynamic 100-pt gap hedges are bought at 15:44 IST.
+        # On Non-Expiry days (Wed, Thu, Fri, Mon), dynamic 100-pt gap hedges are bought at 15:39 IST (1 min before 15:40 F&O close).
         if getattr(config, "OVERNIGHT_SHIELD_ENABLED", True) and not is_expiry_closing_today:
             if self.pm.open_short_legs:
                 buy_hour = config.SHIELD_BUY_HOUR_NON_EXPIRY

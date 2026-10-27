@@ -52,9 +52,9 @@ def now_ist():
 
 def get_market_close_time(check_date=None):
     """
-    Get (hour, minute) for market close based on SEBI CAS rules:
+    Get (hour, minute) for market close based on NSE rules:
     - Expiry day: 15:30 IST
-    - Non-expiry day: 15:45 IST
+    - Non-expiry day: 15:40 IST (NSE Equity Derivatives Session Close)
     """
     if check_date is None:
         check_date = now_ist().date()
@@ -70,7 +70,7 @@ def get_shield_buy_time(check_date=None):
     """
     Get (hour, minute) for deploying overnight shield:
     - Expiry day: 15:29 IST (1 min before 15:30 close)
-    - Non-expiry day: 15:44 IST (1 min before 15:45 close)
+    - Non-expiry day: 15:39 IST (exactly 1 min before 15:40 F&O close)
     """
     if check_date is None:
         check_date = now_ist().date()

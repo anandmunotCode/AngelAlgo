@@ -68,7 +68,7 @@ OVERNIGHT_SHIELD_QTY_MULTIPLIER = 1.0   # 1.0x quantity (equal to short legs, e.
 SHIELD_BUY_HOUR_EXPIRY = 15
 SHIELD_BUY_MINUTE_EXPIRY = 29          # 15:29 IST on weekly/monthly expiry days
 SHIELD_BUY_HOUR_NON_EXPIRY = 15
-SHIELD_BUY_MINUTE_NON_EXPIRY = 44      # 15:44 IST on regular non-expiry trading days
+SHIELD_BUY_MINUTE_NON_EXPIRY = 39      # 15:39 IST (exactly 1 min before 15:40 F&O close)
 
 # Morning Evaluation & Unwind:
 OVERNIGHT_SHIELD_SELL_HOUR = 9
@@ -99,7 +99,7 @@ WEBSOCKET_RECONNECT_SECONDS = 3    # Auto-reconnect WebSocket if dropped
 FALLBACK_POLL_SECONDS = 3          # REST polling if WebSocket fails
 
 # ═══════════════════════════════════════════════════════════════
-# MARKET HOURS (IST) - SEBI CAS EXTENDED TIMINGS
+# MARKET HOURS (IST) - NSE F&O EXTENDED CAS TIMINGS (15:40 CLOSE)
 # ═══════════════════════════════════════════════════════════════
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MINUTE = 15
@@ -108,11 +108,11 @@ MARKET_OPEN_MINUTE = 15
 MARKET_CLOSE_HOUR_EXPIRY = 15
 MARKET_CLOSE_MINUTE_EXPIRY = 30        # 15:30 IST on expiry day
 MARKET_CLOSE_HOUR_NON_EXPIRY = 15
-MARKET_CLOSE_MINUTE_NON_EXPIRY = 45    # 15:45 IST on non-expiry day
+MARKET_CLOSE_MINUTE_NON_EXPIRY = 40    # 15:40 IST on non-expiry day (NSE Equity Derivatives Close)
 
 # Fallback environment overrides
 MARKET_CLOSE_HOUR = int(os.getenv("MARKET_CLOSE_HOUR", 15))
-MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 45))
+MARKET_CLOSE_MINUTE = int(os.getenv("MARKET_CLOSE_MINUTE", 40))
 
 # Wait after market open for initial volatility to settle
 ENTRY_DELAY_MINUTES = 3            # Enter at 09:18 (3 mins after open)
