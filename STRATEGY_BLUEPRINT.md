@@ -149,13 +149,27 @@ flowchart TD
    - Subah 09:15 par IV spike aur bid-ask spread sabse kharab hota hai. 2 ghante wait karne se opening volatility crush hoti hai, spreads normal hote hain, aur position orderly square off hoti hai.
    - Agar market reverse ho gaya toh loss aur bhi kam ho jata hai!
 
-### Phase 5: Straddle Convergence & Final Defense
-Jab adjustments karte-karte Call Strike == Put Strike ho jaye, toh position **Short Straddle** ban jaati hai:
-1. **Rolling Band:** Straddle banne ke baad koi further strike rolling nahi hoti.
-2. **3 Exit Gates:**
-   - **2.0% Capital Stop Loss:** Total P&L deployed margin ke -2.0% par aate hi full exit.
-   - **1.25% Spot Breaker:** Spot straddle strike se 1.25% door gaya toh full exit.
-   - **70% Profit Target:** Combined straddle premium 70% decay hote hi maximum profit book.
+### Phase 5: Straddle Convergence & The Infinity Armor Engine
+Jab adjustments karte-karte Call Strike == Put Strike ($K$) ho jaye, toh position **Short Straddle** ban jaati hai. Passive baithne ke bajaye, engine turant **Active Counter-Adjustments** execute karta hai:
+
+1. **Scenario 1 — Naked Straddle Reached (Daytime):**
+   - **Immediate 1x2 Ratio Armor Deployment:**
+     - Tested Side (jis taraf trend tha): **BUY 2 Lots of $K \pm 100$** (1 wing + 1 trend rider = 1x2 Ratio Backspread).
+     - Untested Side: **BUY 1 Lot of $K \mp 100$** (Protective wing).
+   - **Mathematical Payoff:**
+     - Margin ₹1.67L se girkar ~₹85,000 ho jata hai (~₹80k margin release).
+     - Max tail loss hamesha ke liye cap ho jata hai.
+     - Agar market trend continue karta hai, toh 2 Long wings position ko Net Long Delta (+1.00) dekar massive profit generate karti hain!
+
+2. **Scenario 2 — Hedged Straddle (With Overnight Hedges):**
+   - **Scenario 2.A (ATM):** Missing wing ko fill kiya jata hai aur tested wing par +1 lot add karke 1x2 Ratio Backspread banaya jata hai.
+   - **Scenario 2.B (ITM Breached):** Tested side spread ka loss locked hai. Decayed safe side ko harvest (profit book) karke live ATM spot strike par fresh credit spread roll kiya jata hai, jo locked spread loss ko 100% absorb kar leta hai.
+
+3. **Dynamic Capital Management & Exit Gates:**
+   - **Dynamic Capital Base:** `max(ALLOCATED_CAPITAL_PER_LOT * Lots, Deployed Capital)` (Standard ₹2.00 Lakh base per lot).
+   - **Armor Profit Target:** +2.0% ROI on capital base aate hi full exit.
+   - **70% Straddle Decay Target:** Combined short legs 70% decay hote hi profit book.
+   - **2.0% Strict Capital Stop Loss:** Dynamic capital base ka 2.0% (₹4,000 per lot).
 
 ---
 

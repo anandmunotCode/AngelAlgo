@@ -290,9 +290,11 @@ class PositionManager:
             # Record combined straddle entry premium for 70% decay target calculation
             straddle_entry_prem = short_calls[-1]["current_premium"] + short_puts[-1]["current_premium"]
             self.position["straddle_entry_combined_premium"] = straddle_entry_prem
+            if "straddle_armor_deployed" not in self.position:
+                self.position["straddle_armor_deployed"] = False
             logger.warning(
                 f"[STRADDLE REACHED] Call={call_strike} | Put={put_strike} | "
-                f"Combined Premium={straddle_entry_prem:.2f} | Gap={proximity} pts → NO FURTHER ADJUSTMENTS"
+                f"Combined Premium={straddle_entry_prem:.2f} | Gap={proximity} pts → ACTIVATING STRADDLE COMPENSATOR"
             )
             self.save()
             return True
@@ -301,8 +303,9 @@ class PositionManager:
     def check_straddle_stop_loss(self, spot, deployed_capital=None):
         """
         Check Stop Loss ONLY when position has reached STRADDLE mode:
-        1. Strict 2.0% Stop Loss on ACTUAL Deployed Capital (Utilized Margin).
-           Formula: Max Loss INR = Deployed Capital * 0.02 (e.g. 2% on utilized margin)
+        1. Strict 2.0% Stop Loss on Dynamic Mathematical Capital Base.
+           Formula: Capital Base = max(ALLOCATED_CAPITAL_PER_LOT * Lots, Deployed Capital)
+           Max Loss INR = Capital Base * 0.02 (e.g. 2% on dynamic capital allocation)
         2. Spot Move Breach: Exit if spot moves by >= STRADDLE_SPOT_SL_PCT (1.25%) from straddle strike.
         
         Returns (True, reason_str) if SL is triggered, else (False, "")
@@ -316,19 +319,19 @@ class PositionManager:
 
         straddle_strike = short_calls[-1]["strike"]
 
-        # Dynamic Deployed Capital (Utilized Margin)
-        if deployed_capital is None or deployed_capital <= 0:
-            deployed_capital = config.DEFAULT_MARGIN_PER_LOT_STRADDLE * config.NUM_LOTS
+        # Dynamic Mathematical Capital Allocation Base
+        allocated_capital = getattr(config, "ALLOCATED_CAPITAL_PER_LOT", 200000.0) * config.NUM_LOTS
+        capital_base = max(allocated_capital, float(deployed_capital or 0.0))
 
-        # Rule 1: Strict 2% Deployed Capital Hard Stop Loss
-        max_allowed_loss_inr = deployed_capital * config.STRADDLE_CAPITAL_SL_PCT
+        # Rule 1: Strict 2% Dynamic Capital Hard Stop Loss
+        max_allowed_loss_inr = capital_base * config.STRADDLE_CAPITAL_SL_PCT
         current_total_pnl = self.total_pnl
 
         if current_total_pnl <= -max_allowed_loss_inr:
-            loss_pct_actual = abs(current_total_pnl) / deployed_capital * 100
+            loss_pct_actual = abs(current_total_pnl) / capital_base * 100
             reason = (
                 f"STRADDLE SL [2% CAPITAL LOSS LIMIT]: Total P&L {format_pnl(current_total_pnl)} "
-                f"(-{loss_pct_actual:.2f}%) breached 2% Limit on Deployed Capital {format_premium(deployed_capital)} "
+                f"(-{loss_pct_actual:.2f}%) breached 2% Limit on Dynamic Capital Base {format_premium(capital_base)} "
                 f"(Max Loss: {format_pnl(-max_allowed_loss_inr)})"
             )
             logger.warning(f"🚨 {reason}")

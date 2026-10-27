@@ -492,7 +492,7 @@ class AngelOneAPI:
             logger.error(f"Error fetching trade book: {e}")
             return None
 
-    def get_deployed_margin(self, num_lots=1, is_straddle=False):
+    def get_deployed_margin(self, num_lots=1, is_straddle=False, is_hedged=False):
         """
         Fetch actual utilized margin / deployed capital from Angel RMS.
         Complies strictly with 2 req/sec rate limit by using a 10-second TTL cache.
@@ -523,10 +523,19 @@ class AngelOneAPI:
             except Exception as e:
                 logger.debug(f"Could not fetch RMS limits: {e}")
 
-        # Dynamic fallback based on structure (Iron Condor vs Straddle) and lot size
-        base_margin = config.DEFAULT_MARGIN_PER_LOT_STRADDLE if is_straddle else config.DEFAULT_MARGIN_PER_LOT_IC
+        # Dynamic fallback based on structure (Hedged vs Naked Strangle vs Straddle) and lot size
+        if is_hedged:
+            base_margin = config.DEFAULT_MARGIN_PER_LOT_IC
+            struct_name = "Hedged Wing/Iron Fly"
+        elif is_straddle:
+            base_margin = config.DEFAULT_MARGIN_PER_LOT_STRADDLE
+            struct_name = "Naked Straddle"
+        else:
+            base_margin = config.DEFAULT_MARGIN_PER_LOT_NAKED
+            struct_name = "Naked Strangle"
+
         estimated_margin = base_margin * num_lots
-        logger.debug(f"[ESTIMATED MARGIN] Structure={'Straddle' if is_straddle else 'Iron Condor'}, Lots={num_lots} -> Rs.{estimated_margin:,.2f}")
+        logger.debug(f"[ESTIMATED MARGIN] Structure={struct_name}, Lots={num_lots} -> Rs.{estimated_margin:,.2f}")
         return estimated_margin
 
 

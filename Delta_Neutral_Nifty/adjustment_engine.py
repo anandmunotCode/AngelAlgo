@@ -387,6 +387,340 @@ class AdjustmentEngine:
             "hedge_qty": hedge_qty,
         }
 
+    # ═══════════════════════════════════════════════════════════════
+    # STRADDLE COMPENSATOR & INFINITY ARMOR ENGINE
+    # ═══════════════════════════════════════════════════════════════
+
+    def determine_straddle_tested_side(self, spot, straddle_strike):
+        """
+        Determine which side was tested (threatened by market trend).
+        - If PE was rolled up into CE -> tested_side = "CE" (Bullish trend).
+        - If CE was rolled down into PE -> tested_side = "PE" (Bearish trend).
+        Fallback: If spot >= straddle_strike -> "CE", else "PE".
+        """
+        adjustments = self.pm.position.get("adjustments", [])
+        if adjustments:
+            last_adj = adjustments[-1]
+            reason = last_adj.get("reason", "")
+            if "CE surged" in reason:
+                return "CE"
+            elif "PE surged" in reason:
+                return "PE"
+            closed_id = last_adj.get("closed_leg_id", "")
+            for leg in self.pm.position.get("legs", []):
+                if leg["id"] == closed_id:
+                    if leg["option_type"] == "PE":
+                        return "CE"
+                    elif leg["option_type"] == "CE":
+                        return "PE"
+
+        return "CE" if spot >= straddle_strike else "PE"
+
+    def check_and_deploy_straddle_compensator(self, spot, T, option_chain_ltps, paper_mode=True):
+        """
+        Autonomous Straddle Compensator & Infinity Armor Deployment.
+        Triggered when both short legs converge to Straddle (Strike K).
+        
+        Covers 2 distinct operational scenarios:
+        1. NAKED STRADDLE:
+           - Immediate Armor Lock: Buy 2 lots of (K ± 100) on tested side (1x2 Ratio Backspread).
+           - Buy 1 lot of (K ∓ 100) on untested side (Iron Fly wing + margin unlock).
+           - Caps maximum tail loss forever, unlocks ~Rs.75,000 margin, and gives +1.00 net delta
+             to ride the trend into massive profit if trend continues!
+        
+        2. HEDGED STRADDLE (Overnight hedges already present):
+           - Case 2.A (ATM): Balance missing wing (1 lot) and add +1 lot on tested wing (1x2 Ratio).
+           - Case 2.B (ITM Breached): Harvest decaying safe side (book profit) and roll fresh
+             credit spread at live ATM strike to directly absorb the locked spread loss!
+        """
+        if not self.pm.is_straddle or not self.pm.is_active:
+            return False
+
+        if self.pm.position.get("straddle_armor_deployed", False):
+            return False
+
+        if not getattr(config, "STRADDLE_ARMOR_ENABLED", True):
+            return False
+
+        short_calls = self.pm.short_call_legs
+        short_puts = self.pm.short_put_legs
+        if not short_calls or not short_puts:
+            return False
+
+        short_ce = short_calls[-1]
+        short_pe = short_puts[-1]
+        straddle_strike = short_ce["strike"]
+
+        tested_side = self.determine_straddle_tested_side(spot, straddle_strike)
+        untested_side = "PE" if tested_side == "CE" else "CE"
+        wing_pts = getattr(config, "STRADDLE_ARMOR_WING_PTS", 100)
+        r = config.RISK_FREE_RATE
+
+        logger.warning("=" * 65)
+        logger.warning("[STRADDLE COMPENSATOR ACTIVATION]")
+        logger.warning(f"  Straddle Strike: {straddle_strike} | Spot: {spot:.2f} | Tested Side: {tested_side}")
+
+        # Check existing open hedges
+        open_call_hedges = [h for h in self.pm.open_hedge_legs if h["option_type"] == "CE"]
+        open_put_hedges = [h for h in self.pm.open_hedge_legs if h["option_type"] == "PE"]
+        has_any_hedges = bool(open_call_hedges or open_put_hedges)
+
+        # ─── SCENARIO 1: NAKED STRADDLE (Zero open hedges) ────────
+        if not has_any_hedges:
+            logger.info("  [SCENARIO 1: NAKED STRADDLE] Deploying 1x2 Ratio Armor Wings...")
+            tested_wing_strike = (straddle_strike + wing_pts) if tested_side == "CE" else (straddle_strike - wing_pts)
+            untested_wing_strike = (straddle_strike - wing_pts) if tested_side == "CE" else (straddle_strike + wing_pts)
+
+            tested_lots = getattr(config, "STRADDLE_RATIO_TESTED_LOTS", 2) * config.NUM_LOTS
+            tested_qty = tested_lots * config.LOT_SIZE
+
+            untested_lots = getattr(config, "STRADDLE_RATIO_UNTESTED_LOTS", 1) * config.NUM_LOTS
+            untested_qty = untested_lots * config.LOT_SIZE
+
+            tested_chain = option_chain_ltps.get(tested_side, {})
+            untested_chain = option_chain_ltps.get(untested_side, {})
+
+            tested_prem = float(tested_chain.get(tested_wing_strike, 0.0))
+            if tested_prem <= 0:
+                tested_iv = float(short_ce.get("current_iv", 0.15))
+                tested_prem = greeks_engine.bs_price(spot, tested_wing_strike, T, r, tested_iv, tested_side)
+            tested_iv = greeks_engine.implied_volatility(tested_prem, spot, tested_wing_strike, T, r, tested_side)
+            tested_delta = greeks_engine.all_greeks(spot, tested_wing_strike, T, r, tested_iv, tested_side)["delta"]
+
+            untested_prem = float(untested_chain.get(untested_wing_strike, 0.0))
+            if untested_prem <= 0:
+                untested_iv = float(short_pe.get("current_iv", 0.15))
+                untested_prem = greeks_engine.bs_price(spot, untested_wing_strike, T, r, untested_iv, untested_side)
+            untested_iv = greeks_engine.implied_volatility(untested_prem, spot, untested_wing_strike, T, r, untested_side)
+            untested_delta = greeks_engine.all_greeks(spot, untested_wing_strike, T, r, untested_iv, untested_side)["delta"]
+
+            tested_tok_info = self.api.get_token_info(self.expiry_date, tested_wing_strike, tested_side) if self.api else None
+            tested_tok = tested_tok_info["token"] if tested_tok_info else ""
+            tested_sym = tested_tok_info["symbol"] if tested_tok_info else f"NIFTY_{int(tested_wing_strike)}_{tested_side}"
+
+            if not paper_mode and tested_tok_info and self.api:
+                logger.info(f"  [LIVE ORDER] BUY {tested_qty}x {tested_sym} ({tested_tok})")
+                self.api.place_order(tested_sym, tested_tok, "BUY", tested_qty)
+
+            self.pm.add_leg(
+                leg_type=f"LONG_{tested_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                strike=tested_wing_strike,
+                option_type=tested_side,
+                delta_at_entry=tested_delta,
+                iv_at_entry=tested_iv,
+                entry_premium=tested_prem,
+                symbol_token=tested_tok,
+                trading_symbol=tested_sym,
+                quantity=tested_qty,
+                is_hedge=True,
+            )
+
+            untested_tok_info = self.api.get_token_info(self.expiry_date, untested_wing_strike, untested_side) if self.api else None
+            untested_tok = untested_tok_info["token"] if untested_tok_info else ""
+            untested_sym = untested_tok_info["symbol"] if untested_tok_info else f"NIFTY_{int(untested_wing_strike)}_{untested_side}"
+
+            if not paper_mode and untested_tok_info and self.api:
+                logger.info(f"  [LIVE ORDER] BUY {untested_qty}x {untested_sym} ({untested_tok})")
+                self.api.place_order(untested_sym, untested_tok, "BUY", untested_qty)
+
+            self.pm.add_leg(
+                leg_type=f"LONG_{untested_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                strike=untested_wing_strike,
+                option_type=untested_side,
+                delta_at_entry=untested_delta,
+                iv_at_entry=untested_iv,
+                entry_premium=untested_prem,
+                symbol_token=untested_tok,
+                trading_symbol=untested_sym,
+                quantity=untested_qty,
+                is_hedge=True,
+            )
+
+            self.pm.position["straddle_armor_deployed"] = True
+            self.pm.position["straddle_armor_type"] = "1x2_RATIO_BACKSPREAD"
+            self.pm.position["straddle_tested_side"] = tested_side
+            self.pm.position["straddle_tested_wing_strike"] = tested_wing_strike
+            self.pm.position["straddle_untested_wing_strike"] = untested_wing_strike
+            self.pm.save()
+
+            logger.info(f"  [ARMOR LOCKED] Tested Wing {tested_wing_strike} ({tested_lots} lots) + Untested Wing {untested_wing_strike} (1 lot)")
+            logger.info("=" * 65)
+            return True
+
+        # ─── SCENARIO 2: HEDGED STRADDLE (Hedges already exist) ───
+        is_itm_breach = (tested_side == "CE" and spot >= (straddle_strike + 25)) or \
+                         (tested_side == "PE" and spot <= (straddle_strike - 25))
+
+        if not is_itm_breach:
+            # ─── SCENARIO 2.A: ATM HEDGED STRADDLE ───────────────
+            logger.info("  [SCENARIO 2.A: ATM HEDGED STRADDLE] Balancing wings & adding trend rider...")
+            untested_hedges = open_put_hedges if untested_side == "PE" else open_call_hedges
+            if not untested_hedges:
+                untested_wing_strike = (straddle_strike - wing_pts) if untested_side == "PE" else (straddle_strike + wing_pts)
+                untested_qty = config.LOT_SIZE * config.NUM_LOTS
+                untested_chain = option_chain_ltps.get(untested_side, {})
+                untested_prem = float(untested_chain.get(untested_wing_strike, 0.0))
+                if untested_prem <= 0:
+                    untested_iv = float(short_pe.get("current_iv", 0.15))
+                    untested_prem = greeks_engine.bs_price(spot, untested_wing_strike, T, r, untested_iv, untested_side)
+                untested_iv = greeks_engine.implied_volatility(untested_prem, spot, untested_wing_strike, T, r, untested_side)
+                untested_delta = greeks_engine.all_greeks(spot, untested_wing_strike, T, r, untested_iv, untested_side)["delta"]
+
+                untested_tok_info = self.api.get_token_info(self.expiry_date, untested_wing_strike, untested_side) if self.api else None
+                untested_tok = untested_tok_info["token"] if untested_tok_info else ""
+                untested_sym = untested_tok_info["symbol"] if untested_tok_info else f"NIFTY_{int(untested_wing_strike)}_{untested_side}"
+
+                if not paper_mode and untested_tok_info and self.api:
+                    self.api.place_order(untested_sym, untested_tok, "BUY", untested_qty)
+
+                self.pm.add_leg(
+                    leg_type=f"LONG_{untested_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                    strike=untested_wing_strike,
+                    option_type=untested_side,
+                    delta_at_entry=untested_delta,
+                    iv_at_entry=untested_iv,
+                    entry_premium=untested_prem,
+                    symbol_token=untested_tok,
+                    trading_symbol=untested_sym,
+                    quantity=untested_qty,
+                    is_hedge=True,
+                )
+
+            tested_wing_strike = (straddle_strike + wing_pts) if tested_side == "CE" else (straddle_strike - wing_pts)
+            extra_qty = config.LOT_SIZE * config.NUM_LOTS
+            tested_chain = option_chain_ltps.get(tested_side, {})
+            tested_prem = float(tested_chain.get(tested_wing_strike, 0.0))
+            if tested_prem <= 0:
+                tested_iv = float(short_ce.get("current_iv", 0.15))
+                tested_prem = greeks_engine.bs_price(spot, tested_wing_strike, T, r, tested_iv, tested_side)
+            tested_iv = greeks_engine.implied_volatility(tested_prem, spot, tested_wing_strike, T, r, tested_side)
+            tested_delta = greeks_engine.all_greeks(spot, tested_wing_strike, T, r, tested_iv, tested_side)["delta"]
+
+            tested_tok_info = self.api.get_token_info(self.expiry_date, tested_wing_strike, tested_side) if self.api else None
+            tested_tok = tested_tok_info["token"] if tested_tok_info else ""
+            tested_sym = tested_tok_info["symbol"] if tested_tok_info else f"NIFTY_{int(tested_wing_strike)}_{tested_side}"
+
+            if not paper_mode and tested_tok_info and self.api:
+                self.api.place_order(tested_sym, tested_tok, "BUY", extra_qty)
+
+            self.pm.add_leg(
+                leg_type=f"LONG_{tested_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                strike=tested_wing_strike,
+                option_type=tested_side,
+                delta_at_entry=tested_delta,
+                iv_at_entry=tested_iv,
+                entry_premium=tested_prem,
+                symbol_token=tested_tok,
+                trading_symbol=tested_sym,
+                quantity=extra_qty,
+                is_hedge=True,
+            )
+
+            self.pm.position["straddle_armor_deployed"] = True
+            self.pm.position["straddle_armor_type"] = "HEDGED_1x2_RATIO"
+            self.pm.position["straddle_tested_side"] = tested_side
+            self.pm.save()
+            logger.info("  [SCENARIO 2.A COMPLETE] Converted to Hedged 1x2 Ratio Armor.")
+            logger.info("=" * 65)
+            return True
+
+        else:
+            # ─── SCENARIO 2.B: ITM BREACHED HEDGED STRADDLE ──────
+            logger.info(f"  [SCENARIO 2.B: ITM BREACHED STRADDLE] Spot {spot:.2f} breached {straddle_strike} ({tested_side}). Harvesting safe side and shifting credit...")
+            safe_short_leg = short_pe if tested_side == "CE" else short_ce
+            safe_hedges = open_put_hedges if tested_side == "CE" else open_call_hedges
+
+            if not paper_mode and self.api:
+                sym = safe_short_leg.get("trading_symbol") or f"NIFTY_{int(safe_short_leg['strike'])}_{untested_side}"
+                tok = safe_short_leg.get("symbol_token", "")
+                q = safe_short_leg.get("quantity", config.LOT_SIZE * config.NUM_LOTS)
+                self.api.place_order(sym, tok, "BUY", q)
+
+            pnl_harvest = self.pm.close_leg(
+                safe_short_leg["id"],
+                safe_short_leg["current_premium"],
+                f"STRADDLE_HARVEST_SAFE_{untested_side}"
+            )
+            logger.info(f"  [SAFE SIDE HARVESTED] Closed {safe_short_leg['strike']} {untested_side} @ {safe_short_leg['current_premium']:.2f}. PnL: {format_pnl(pnl_harvest)}")
+
+            for h in safe_hedges:
+                if not paper_mode and self.api:
+                    h_sym = h.get("trading_symbol") or f"NIFTY_{int(h['strike'])}_{untested_side}"
+                    h_tok = h.get("symbol_token", "")
+                    h_q = h.get("quantity", config.LOT_SIZE * config.NUM_LOTS)
+                    self.api.place_order(h_sym, h_tok, "SELL", h_q)
+                self.pm.close_leg(h["id"], h["current_premium"], "STRADDLE_HARVEST_HEDGE")
+
+            new_atm_strike = float(round(spot / config.STRIKE_GAP) * config.STRIKE_GAP)
+            new_credit_side = untested_side
+            new_credit_wing_strike = (new_atm_strike - wing_pts) if new_credit_side == "PE" else (new_atm_strike + wing_pts)
+
+            new_chain = option_chain_ltps.get(new_credit_side, {})
+            new_short_prem = float(new_chain.get(new_atm_strike, 0.0))
+            if new_short_prem <= 0:
+                new_iv = 0.15
+                new_short_prem = greeks_engine.bs_price(spot, new_atm_strike, T, r, new_iv, new_credit_side)
+            new_iv = greeks_engine.implied_volatility(new_short_prem, spot, new_atm_strike, T, r, new_credit_side)
+            new_delta = greeks_engine.all_greeks(spot, new_atm_strike, T, r, new_iv, new_credit_side)["delta"]
+
+            new_wing_prem = float(new_chain.get(new_credit_wing_strike, 0.0))
+            if new_wing_prem <= 0:
+                new_wing_prem = greeks_engine.bs_price(spot, new_credit_wing_strike, T, r, new_iv, new_credit_side)
+            new_wing_iv = greeks_engine.implied_volatility(new_wing_prem, spot, new_credit_wing_strike, T, r, new_credit_side)
+            new_wing_delta = greeks_engine.all_greeks(spot, new_credit_wing_strike, T, r, new_wing_iv, new_credit_side)["delta"]
+
+            roll_qty = config.LOT_SIZE * config.NUM_LOTS
+
+            tok_info = self.api.get_token_info(self.expiry_date, new_atm_strike, new_credit_side) if self.api else None
+            tok = tok_info["token"] if tok_info else ""
+            sym = tok_info["symbol"] if tok_info else f"NIFTY_{int(new_atm_strike)}_{new_credit_side}"
+
+            if not paper_mode and tok_info and self.api:
+                self.api.place_order(sym, tok, "SELL", roll_qty)
+
+            self.pm.add_leg(
+                leg_type=f"SHORT_{new_credit_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                strike=new_atm_strike,
+                option_type=new_credit_side,
+                delta_at_entry=new_delta,
+                iv_at_entry=new_iv,
+                entry_premium=new_short_prem,
+                symbol_token=tok,
+                trading_symbol=sym,
+                quantity=roll_qty,
+                is_hedge=False,
+            )
+
+            wing_tok_info = self.api.get_token_info(self.expiry_date, new_credit_wing_strike, new_credit_side) if self.api else None
+            wing_tok = wing_tok_info["token"] if wing_tok_info else ""
+            wing_sym = wing_tok_info["symbol"] if wing_tok_info else f"NIFTY_{int(new_credit_wing_strike)}_{new_credit_side}"
+
+            if not paper_mode and wing_tok_info and self.api:
+                self.api.place_order(wing_sym, wing_tok, "BUY", roll_qty)
+
+            self.pm.add_leg(
+                leg_type=f"LONG_{new_credit_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+                strike=new_credit_wing_strike,
+                option_type=new_credit_side,
+                delta_at_entry=new_wing_delta,
+                iv_at_entry=new_wing_iv,
+                entry_premium=new_wing_prem,
+                symbol_token=wing_tok,
+                trading_symbol=wing_sym,
+                quantity=roll_qty,
+                is_hedge=True,
+            )
+
+            self.pm.position["straddle_armor_deployed"] = True
+            self.pm.position["straddle_armor_type"] = "ITM_CREDIT_SHIFT"
+            self.pm.position["straddle_tested_side"] = tested_side
+            self.pm.save()
+
+            logger.info(f"  [FRESH CREDIT DEPLOYED] Sold {new_atm_strike} {new_credit_side} @ {new_short_prem:.2f} + Bought {new_credit_wing_strike} @ {new_wing_prem:.2f}")
+            logger.info(f"  [CREDIT OFFSET] Fresh net credit ~Rs.{(new_short_prem - new_wing_prem) * roll_qty:.2f} deployed to offset locked spread loss!")
+            logger.info("=" * 65)
+            return True
+
 
     # ─── HELPERS ──────────────────────────────────────────────────
 

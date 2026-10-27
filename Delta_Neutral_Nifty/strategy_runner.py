@@ -458,9 +458,11 @@ class StrategyRunner:
         net_delta = portfolio["net_delta"]
 
         # Fetch deployed margin (utilizes 10s TTL cache, 0.1 req/sec max)
+        is_hedged_now = bool(self.pm.open_hedge_legs)
         deployed_margin = self.api.get_deployed_margin(
             num_lots=config.NUM_LOTS,
-            is_straddle=self.pm.is_straddle
+            is_straddle=self.pm.is_straddle,
+            is_hedged=is_hedged_now
         )
 
         # Persist live greeks, margin & mode for Node.js Web Dashboard streaming
@@ -560,14 +562,30 @@ class StrategyRunner:
             return  # Skip regular strangle adjustments while holding Iron Condor armor
 
 
-        # ─── STRADDLE PHASE MONITORING (ZERO ADJUSTMENTS) ──────────
+        # ─── STRADDLE PHASE MONITORING & ACTIVE COMPENSATOR ───────
         if self.pm.is_straddle:
-            # 2. Check Strict 2.0% Deployed Capital Stop Loss & Spot Circuit Breaker
-            sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot, deployed_capital=deployed_margin)
-            if sl_hit:
-                print_banner("STRADDLE STOP LOSS TRIGGERED")
-                logger.warning(f"[STRADDLE EXIT] {sl_reason}")
-                self._close_all_positions(reason=sl_reason)
+            # 1. Deploy Straddle Infinity Armor / Compensator if not yet deployed
+            if not self.pm.position.get("straddle_armor_deployed", False):
+                logger.warning("[STRADDLE ACTIVE] Checking and deploying Straddle Infinity Armor / Compensator...")
+                armor_deployed = self.adj_engine.check_and_deploy_straddle_compensator(
+                    spot=spot,
+                    T=T,
+                    option_chain_ltps=option_chain_ltps,
+                    paper_mode=self.paper_mode
+                )
+                if armor_deployed:
+                    logger.info("[STRADDLE ARMOR] Infinity Armor / Compensator successfully deployed.")
+
+            # 2. Check Armor Profit Target (+2% ROI on dynamic capital base)
+            allocated_capital = getattr(config, "ALLOCATED_CAPITAL_PER_LOT", 200000.0) * config.NUM_LOTS
+            capital_base = max(allocated_capital, float(deployed_margin or 0.0))
+            current_roi = (self.pm.total_pnl / capital_base) if capital_base > 0 else 0.0
+            armor_target_roi = getattr(config, "STRADDLE_ARMOR_PROFIT_ROI_PCT", 0.02)
+            if current_roi >= armor_target_roi:
+                print_banner("STRADDLE ARMOR PROFIT TARGET REACHED (+2% ROI)")
+                reason = f"STRADDLE_ARMOR_PROFIT: ROI +{current_roi*100:.2f}% >= +{armor_target_roi*100:.2f}% (Total P&L: {format_pnl(self.pm.total_pnl)})"
+                logger.info(f"[ARMOR PROFIT EXIT] {reason}")
+                self._close_all_positions(reason=reason)
                 return
 
             # 3. Check 70% Straddle Premium Decay Profit Target
@@ -578,7 +596,14 @@ class StrategyRunner:
                 self._close_all_positions(reason=tp_reason)
                 return
 
-            # Zero adjustments during straddle mode
+            # 4. Check Strict 2.0% Dynamic Capital Stop Loss & Spot Circuit Breaker
+            sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot, deployed_capital=deployed_margin)
+            if sl_hit:
+                print_banner("STRADDLE STOP LOSS TRIGGERED")
+                logger.warning(f"[STRADDLE EXIT] {sl_reason}")
+                self._close_all_positions(reason=sl_reason)
+                return
+
             return
 
         # ─── NON-STRADDLE / OTM PHASE MONITORING ───────────────────

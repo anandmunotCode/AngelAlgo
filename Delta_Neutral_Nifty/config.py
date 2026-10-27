@@ -11,8 +11,8 @@ import os
 LOT_SIZE = 65                      # Shares per lot
 NUM_LOTS = 1                       # Lots per entry
 STRIKE_GAP = 50                    # Nifty options strike interval
-CYCLE_START_DAY = 4                # Friday (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri) - Temporarily set to Friday for paper testing
-WEEKLY_EXPIRY_DAY = 1              # Tuesday (Weekly expiry at 15:15 IST)
+CYCLE_START_DAY = 2                # Wednesday (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri) - Official cycle start at 09:18 IST
+WEEKLY_EXPIRY_DAY = 1              # Tuesday (Weekly expiry auto-squareoff at 15:15 IST)
 
 # Nifty Spot Token (Angel One)
 NIFTY_SPOT_TOKEN = "99926000"
@@ -23,14 +23,25 @@ NIFTY_SYMBOL = "NIFTY"
 # ═══════════════════════════════════════════════════════════════
 # DYNAMIC CAPITAL & RISK MANAGEMENT (INSTITUTIONAL GRADE)
 # ═══════════════════════════════════════════════════════════════
-# Stop Loss is dynamically calculated on the ACTUAL Deployed Capital (Utilized Margin)
-STRADDLE_CAPITAL_SL_PCT = 0.02         # Strict 2.0% of dynamic deployed capital (e.g. 2% on utilized margin)
+# Total allocated capital per lot (Standard institutional sizing: Peak margin + drawdown buffer)
+ALLOCATED_CAPITAL_PER_LOT = 200000.0   # Rs. 2,00,000 per lot base for mathematical % scaling
+STRADDLE_CAPITAL_SL_PCT = 0.02         # Strict 2.0% stop loss on dynamic capital base
 STRADDLE_PROFIT_DECAY_PCT = 0.70       # 70% combined straddle premium decay for profit booking
 OTM_FULL_DECAY_PRICE = 1.0             # Exit when both short legs decay below Rs.1.00 (Full OTM capture)
 
 # Dynamic Margin Estimation Fallbacks (used in paper mode or when API RMS is unavailable)
-DEFAULT_MARGIN_PER_LOT_IC = 65000.0    # Approximate exchange margin for 4-leg hedged Iron Condor
-DEFAULT_MARGIN_PER_LOT_STRADDLE = 95000.0 # Approximate exchange margin for 4-leg Straddle
+DEFAULT_MARGIN_PER_LOT_IC = 90000.0        # Exchange margin for hedged positions (Iron Condor / Iron Fly)
+DEFAULT_MARGIN_PER_LOT_NAKED = 167000.0    # Exchange margin for unhedged / naked strangle
+DEFAULT_MARGIN_PER_LOT_STRADDLE = 167000.0 # Exchange margin for naked straddle
+
+# ═══════════════════════════════════════════════════════════════
+# STRADDLE INFINITY ARMOR & COMPENSATOR ENGINE
+# ═══════════════════════════════════════════════════════════════
+STRADDLE_ARMOR_ENABLED = True          # Enable autonomous active counter-adjustments at Straddle
+STRADDLE_ARMOR_WING_PTS = 100          # 100-point fixed wing offset (K + 100 CE, K - 100 PE)
+STRADDLE_RATIO_TESTED_LOTS = 2         # 2 lots on tested wing (1x2 Ratio Backspread)
+STRADDLE_RATIO_UNTESTED_LOTS = 1       # 1 lot on untested wing (protective armor)
+STRADDLE_ARMOR_PROFIT_ROI_PCT = 0.02   # 2.0% ROI on capital base for taking full profit in Armor mode
 
 # ═══════════════════════════════════════════════════════════════
 # STRATEGY ENTRY & DAYTIME EXECUTION
