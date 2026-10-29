@@ -476,22 +476,8 @@ class StrategyRunner:
             if now.hour == config.OVERNIGHT_SHIELD_SELL_HOUR and now.minute >= config.OVERNIGHT_SHIELD_SELL_MINUTE:
                 if self.pm.open_overnight_hedge_legs:
                     today_str = str(now.date())
-                    # 1. Check if gap breach hold is already active from earlier today
-                    if self.pm.position.get("gap_breach_active"):
-                        hold_until_str = self.pm.position.get("gap_breach_hold_until", "")
-                        if hold_until_str:
-                            try:
-                                hold_until_dt = datetime.strptime(hold_until_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
-                                if now >= hold_until_dt:
-                                    print_banner("GAP BREACH HOLD DURATION COMPLETED - CLOSING ALL POSITIONS")
-                                    logger.info(f"[GAP BREACH AUTO-EXIT] {config.GAP_BREACH_HOLD_HOURS}h protection hold completed. Closing Iron Condor.")
-                                    self._close_all_positions(reason="GAP_BREACH_TIMEOUT_EXIT")
-                                    return
-                            except Exception as e:
-                                logger.error(f"Error parsing gap_breach_hold_until: {e}")
-
-                    # 2. Check opening gap breach if not evaluated today
-                    elif self.pm.position.get("last_gap_check_date") != today_str:
+                    # Check opening gap breach if not evaluated today
+                    if self.pm.position.get("last_gap_check_date") != today_str:
                         short_ce = self.pm.short_call_legs[-1] if self.pm.short_call_legs else None
                         short_pe = self.pm.short_put_legs[-1] if self.pm.short_put_legs else None
 
@@ -503,13 +489,14 @@ class StrategyRunner:
                             print_banner(f"FAT-TAIL GAP BREACH DETECTED: {breached_info} ITM")
                             logger.warning(
                                 f"[GAP BREACH] Spot {spot:.2f} breached short leg ({breached_info})! "
-                                f"OVERNIGHT HEDGES RETAINED (Iron Condor armor active) to cap max loss at ~Rs.4,940. "
-                                f"Position will be held for {config.GAP_BREACH_HOLD_HOURS} hours before closing."
+                                f"Overnight armor active. Deploying active Gap Breach Compensator (Scenario 2.B Shift & Harvest)..."
                             )
-                            hold_until = now + timedelta(hours=config.GAP_BREACH_HOLD_HOURS)
-                            self.pm.position["gap_breach_active"] = True
-                            self.pm.position["gap_breach_detected_time"] = now.strftime("%Y-%m-%d %H:%M:%S")
-                            self.pm.position["gap_breach_hold_until"] = hold_until.strftime("%Y-%m-%d %H:%M:%S")
+                            self.adj_engine.deploy_gap_breach_compensator(
+                                spot=spot,
+                                T=T,
+                                option_chain_ltps=self.cached_chain_ltps,
+                                paper_mode=self.paper_mode
+                            )
                             self.pm.position["last_gap_check_date"] = today_str
                             self.pm.save()
                         else:
@@ -550,18 +537,6 @@ class StrategyRunner:
                             self.pm.position["last_shield_bought_date"] = today_str
                             self.pm.save()
 
-        # ─── GAP BREACH DEFENSE MODE (NO STRANGLE ADJUSTMENTS) ─────
-        if self.pm.position.get("gap_breach_active"):
-            # Check 2% Capital Stop Loss while holding Iron Condor
-            sl_hit, sl_reason = self.pm.check_straddle_stop_loss(spot, deployed_capital=deployed_margin)
-            if sl_hit:
-                print_banner("GAP BREACH CAPITAL STOP LOSS TRIGGERED")
-                logger.warning(f"[GAP BREACH EXIT] {sl_reason}")
-                self._close_all_positions(reason=sl_reason)
-                return
-            return  # Skip regular strangle adjustments while holding Iron Condor armor
-
-
         # ─── STRADDLE PHASE MONITORING & ACTIVE COMPENSATOR ───────
         if self.pm.is_straddle:
             # 1. Deploy Straddle Infinity Armor / Compensator if not yet deployed
@@ -570,7 +545,7 @@ class StrategyRunner:
                 armor_deployed = self.adj_engine.check_and_deploy_straddle_compensator(
                     spot=spot,
                     T=T,
-                    option_chain_ltps=option_chain_ltps,
+                    option_chain_ltps=self.cached_chain_ltps,
                     paper_mode=self.paper_mode
                 )
                 if armor_deployed:

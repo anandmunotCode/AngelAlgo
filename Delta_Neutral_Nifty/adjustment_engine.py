@@ -13,6 +13,7 @@ ADJUSTMENT ACTION:
   4. Reset the losing short leg's surge baseline to its CURRENT market price.
   5. Check if Call Strike == Put Strike (Straddle Convergence) → Lock adjustments forever.
 """
+from datetime import datetime
 from . import config
 from .utils import setup_logger, format_pnl, format_delta
 from . import greeks_engine
@@ -720,6 +721,159 @@ class AdjustmentEngine:
             logger.info(f"  [CREDIT OFFSET] Fresh net credit ~Rs.{(new_short_prem - new_wing_prem) * roll_qty:.2f} deployed to offset locked spread loss!")
             logger.info("=" * 65)
             return True
+
+    def deploy_gap_breach_compensator(self, spot, T, option_chain_ltps, paper_mode=True):
+        """
+        Autonomous Gap Breach Compensator & Credit Shift (Scenario 2.B Architecture).
+        Triggered when market opens with a fat-tail overnight gap breaching one of the short legs.
+        Overnight hedge on the breached side caps maximum loss (locked defined-risk spread).
+        
+        Execution:
+        1. HARVEST SAFE SIDE:
+           - Close decaying safe-side short leg (booking max cash profit).
+           - Close safe-side overnight hedge (salvaging remaining value).
+        2. RETAIN BREACHED SIDE:
+           - Keep breached short leg + overnight long hedge intact (defined-risk spread with locked loss).
+        3. SHIFT FRESH CREDIT TENT (LIVE ATM):
+           - Sell fresh ATM credit spread on the safe side (Sell ATM strike + Buy ATM wing).
+           - Fresh net credit collected directly absorbs & offsets the locked spread loss!
+        """
+        if not self.pm.is_active:
+            return False
+
+        if self.pm.position.get("gap_breach_compensated", False):
+            return False
+
+        short_calls = self.pm.short_call_legs
+        short_puts = self.pm.short_put_legs
+        if not short_calls or not short_puts:
+            return False
+
+        short_ce = short_calls[-1]
+        short_pe = short_puts[-1]
+
+        ce_breached = spot >= short_ce["strike"]
+        pe_breached = spot <= short_pe["strike"]
+
+        if not (ce_breached or pe_breached):
+            logger.info(f"[GAP BREACH COMPENSATOR] Spot {spot:.2f} is within strikes ({short_pe['strike']} PE - {short_ce['strike']} CE). No breach.")
+            return False
+
+        breached_side = "CE" if ce_breached else "PE"
+        safe_side = "PE" if breached_side == "CE" else "CE"
+        breached_leg = short_ce if breached_side == "CE" else short_pe
+        safe_short_leg = short_pe if breached_side == "CE" else short_ce
+
+        wing_pts = getattr(config, "OVERNIGHT_SHIELD_WING_PTS", 100)
+        r = config.RISK_FREE_RATE
+
+        logger.warning("=" * 65)
+        logger.warning("[GAP BREACH COMPENSATOR ACTIVATION]")
+        logger.warning(
+            f"  Breached Side: {breached_side} (Strike {breached_leg['strike']} vs Spot {spot:.2f}) | "
+            f"Safe Side: {safe_side} (Strike {safe_short_leg['strike']})"
+        )
+
+        # 1. Harvest Safe Side Short Leg
+        safe_qty = safe_short_leg.get("quantity", config.LOT_SIZE * config.NUM_LOTS)
+        if not paper_mode and self.api:
+            sym = safe_short_leg.get("trading_symbol") or f"NIFTY_{int(safe_short_leg['strike'])}_{safe_side}"
+            tok = safe_short_leg.get("symbol_token", "")
+            self.api.place_order(sym, tok, "BUY", safe_qty)
+
+        pnl_harvest = self.pm.close_leg(
+            safe_short_leg["id"],
+            safe_short_leg["current_premium"],
+            f"GAP_BREACH_HARVEST_SAFE_{safe_side}"
+        )
+        logger.info(f"  [SAFE SIDE HARVESTED] Closed {safe_short_leg['strike']} {safe_side} @ {safe_short_leg['current_premium']:.2f}. Realized PnL: {format_pnl(pnl_harvest)}")
+
+        # 2. Harvest Safe Side Overnight Hedges (if open)
+        safe_hedges = [h for h in self.pm.open_hedge_legs if h["option_type"] == safe_side]
+        for h in safe_hedges:
+            h_qty = h.get("quantity", config.LOT_SIZE * config.NUM_LOTS)
+            if not paper_mode and self.api:
+                h_sym = h.get("trading_symbol") or f"NIFTY_{int(h['strike'])}_{safe_side}"
+                h_tok = h.get("symbol_token", "")
+                self.api.place_order(h_sym, h_tok, "SELL", h_qty)
+            self.pm.close_leg(h["id"], h["current_premium"], f"GAP_BREACH_HARVEST_HEDGE_{safe_side}")
+            logger.info(f"  [SAFE HEDGE HARVESTED] Closed {h['strike']} {safe_side} @ {h['current_premium']:.2f}")
+
+        # 3. Deploy Fresh ATM Credit Spread on the Safe Side
+        new_atm_strike = float(round(spot / config.STRIKE_GAP) * config.STRIKE_GAP)
+        new_credit_side = safe_side
+        new_credit_wing_strike = (new_atm_strike - wing_pts) if new_credit_side == "PE" else (new_atm_strike + wing_pts)
+
+        new_chain = option_chain_ltps.get(new_credit_side, {}) if option_chain_ltps else {}
+        new_short_prem = float(new_chain.get(new_atm_strike, 0.0))
+        if new_short_prem <= 0:
+            new_iv = 0.15
+            new_short_prem = greeks_engine.bs_price(spot, new_atm_strike, T, r, new_iv, new_credit_side)
+        new_iv = greeks_engine.implied_volatility(new_short_prem, spot, new_atm_strike, T, r, new_credit_side)
+        new_delta = greeks_engine.all_greeks(spot, new_atm_strike, T, r, new_iv, new_credit_side)["delta"]
+
+        new_wing_prem = float(new_chain.get(new_credit_wing_strike, 0.0))
+        if new_wing_prem <= 0:
+            new_wing_prem = greeks_engine.bs_price(spot, new_credit_wing_strike, T, r, new_iv, new_credit_side)
+        new_wing_iv = greeks_engine.implied_volatility(new_wing_prem, spot, new_credit_wing_strike, T, r, new_credit_side)
+        new_wing_delta = greeks_engine.all_greeks(spot, new_credit_wing_strike, T, r, new_wing_iv, new_credit_side)["delta"]
+
+        roll_qty = config.LOT_SIZE * config.NUM_LOTS
+
+        # Enter Short ATM Leg
+        tok_info = self.api.get_token_info(self.expiry_date, new_atm_strike, new_credit_side) if self.api else None
+        tok = tok_info["token"] if tok_info else ""
+        sym = tok_info["symbol"] if tok_info else f"NIFTY_{int(new_atm_strike)}_{new_credit_side}"
+
+        if not paper_mode and tok_info and self.api:
+            self.api.place_order(sym, tok, "SELL", roll_qty)
+
+        self.pm.add_leg(
+            leg_type=f"SHORT_{new_credit_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+            strike=new_atm_strike,
+            option_type=new_credit_side,
+            delta_at_entry=new_delta,
+            iv_at_entry=new_iv,
+            entry_premium=new_short_prem,
+            symbol_token=tok,
+            trading_symbol=sym,
+            quantity=roll_qty,
+            is_hedge=False,
+        )
+
+        # Enter Long ATM Wing Hedge
+        wing_tok_info = self.api.get_token_info(self.expiry_date, new_credit_wing_strike, new_credit_side) if self.api else None
+        wing_tok = wing_tok_info["token"] if wing_tok_info else ""
+        wing_sym = wing_tok_info["symbol"] if wing_tok_info else f"NIFTY_{int(new_credit_wing_strike)}_{new_credit_side}"
+
+        if not paper_mode and wing_tok_info and self.api:
+            self.api.place_order(wing_sym, wing_tok, "BUY", roll_qty)
+
+        self.pm.add_leg(
+            leg_type=f"LONG_{new_credit_side.replace('CE', 'CALL').replace('PE', 'PUT')}",
+            strike=new_credit_wing_strike,
+            option_type=new_credit_side,
+            delta_at_entry=new_wing_delta,
+            iv_at_entry=new_wing_iv,
+            entry_premium=new_wing_prem,
+            symbol_token=wing_tok,
+            trading_symbol=wing_sym,
+            quantity=roll_qty,
+            is_hedge=True,
+        )
+
+        # Update position state
+        self.pm.position["gap_breach_active"] = False
+        self.pm.position["gap_breach_compensated"] = True
+        self.pm.position["gap_breach_side"] = breached_side
+        self.pm.position["gap_breach_compensation_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.pm.save()
+
+        net_credit = (new_short_prem - new_wing_prem) * roll_qty
+        logger.info(f"  [FRESH CREDIT DEPLOYED] Sold {new_atm_strike} {new_credit_side} @ {new_short_prem:.2f} + Bought {new_credit_wing_strike} @ {new_wing_prem:.2f}")
+        logger.info(f"  [CREDIT OFFSET] Fresh net credit ~Rs.{net_credit:.2f} deployed to offset breached spread loss!")
+        logger.info("=" * 65)
+        return True
 
 
     # ─── HELPERS ──────────────────────────────────────────────────

@@ -73,7 +73,7 @@ SHIELD_BUY_MINUTE_NON_EXPIRY = 39      # 15:39 IST (exactly 1 min before 15:40 F
 # Morning Evaluation & Unwind:
 OVERNIGHT_SHIELD_SELL_HOUR = 9
 OVERNIGHT_SHIELD_SELL_MINUTE = 15      # Dot 09:15 IST morning opening check
-GAP_BREACH_HOLD_HOURS = 2.0            # If short leg breached ITM, hold Iron Condor for 2 hrs before squareoff
+GAP_BREACH_COMPENSATOR_ENABLED = True  # If short leg breached ITM, deploy active Scenario 2.B Credit Shift & Harvest
 
 # ═══════════════════════════════════════════════════════════════
 # DYNAMIC ADJUSTMENT TRIGGERS (ACTIVE IN NON-STRADDLE PHASE)

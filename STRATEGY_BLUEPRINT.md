@@ -67,7 +67,7 @@ Option selling mein sabse bada darr hota hai **Overnight Fat-Tail Gap Risk**:
 | **Shield Deploy Timing (Expiry)** | 15:29 IST (`SHIELD_BUY_MINUTE_EXPIRY = 29`) | 1 min before 15:30 close on expiry days |
 | **Shield Deploy Timing (Non-Expiry)** | 15:39 IST (`SHIELD_BUY_MINUTE_NON_EXPIRY = 39`) | Exactly 1 min before 15:40 F&O close |
 | **Morning Evaluation Time** | 09:15 IST (`OVERNIGHT_SHIELD_SELL_MINUTE = 15`) | Dot market open evaluation |
-| **Gap Breach Protection Hold** | 2.0 Hours (`GAP_BREACH_HOLD_HOURS = 2.0`) | Hold Iron Condor armor for 2 hrs if short leg breached ITM |
+| **Gap Breach Compensator** | Active Scenario 2.B Shift | Safe side harvested + Fresh ATM credit spread offset |
 | **Straddle Convergence Setting** | `STRADDLE_PROXIMITY_PTS = 0` | When Short Call Strike == Short Put Strike |
 | **Capital Stop Loss** | 2.0% of Dynamic Capital Base | Hard exit if total loss exceeds 2% of allocated capital |
 | **Straddle Spot Breaker** | 1.25% Spot Distance | Hard exit if Nifty moves $\ge 1.25\%$ from straddle strike |
@@ -144,10 +144,11 @@ flowchart TD
    - Overnight hedges ko **dot 09:15 AM par SELL** karke exit kar diya jata hai.
    - Position daytime harvest mode mein continue karti hai.
 3. **Scenario B — Fat-Tail Gap Breach (Koi bhi Short Leg ITM ban gayi):**
-   - **Hedge exit nahi hota!** Hedge ko retain karte hain taaki Iron Condor ka protection active rahe aur loss ₹4,940 se aage na badhe.
-   - Algo `gap_breach_active = True` mark karta hai aur **2 ghante ka wait** karta hai (`GAP_BREACH_HOLD_HOURS = 2.0`).
-   - Subah 09:15 par IV spike aur bid-ask spread sabse kharab hota hai. 2 ghante wait karne se opening volatility crush hoti hai, spreads normal hote hain, aur position orderly square off hoti hai.
-   - Agar market reverse ho gaya toh loss aur bhi kam ho jata hai!
+   - **Breached Side Hedge Retain:** Breached short leg aur uska long hedge open rehta hai taaki spread loss ₹4,940 par strictly cap rahe.
+   - **Active Counter-Adjustment (Scenario 2.B Credit Shift & Harvest):**
+     1. Decayed safe side short leg + hedge ko turant harvest (close) karke maximum cash profit book karte hain.
+     2. Live ATM spot strike par safe side fresh Credit Spread (Sell ATM + Buy ATM-100 wing) deploy karte hain.
+     3. Fresh net credit loss ko 100% absorb aur counter-balance karta hai, position ko passive timeout surrender ke bajaye active profitable defense mein convert karta hai!
 
 ### Phase 5: Straddle Convergence & The Infinity Armor Engine
 Jab adjustments karte-karte Call Strike == Put Strike ($K$) ho jaye, toh position **Short Straddle** ban jaati hai. Passive baithne ke bajaye, engine turant **Active Counter-Adjustments** execute karta hai:
