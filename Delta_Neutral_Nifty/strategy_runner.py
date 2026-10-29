@@ -18,7 +18,7 @@ from . import config
 from .utils import (
     setup_logger, now_ist, is_market_open, is_entry_window,
     get_current_expiry, is_expiry_day, time_to_expiry_years,
-    get_atm_strike, print_banner, print_position_table, format_pnl, format_delta,
+    get_atm_strike, print_banner, print_position_table, format_pnl, format_delta, format_premium,
     get_market_close_time, get_shield_buy_time, IST,
 )
 from .angel_api import AngelOneAPI
@@ -537,6 +537,32 @@ class StrategyRunner:
                             self.pm.position["last_shield_bought_date"] = today_str
                             self.pm.save()
 
+        # ─── DYNAMIC CAPITAL ALLOCATION BASE & UNIVERSAL STOP LOSS ─
+        allocated_capital = getattr(config, "ALLOCATED_CAPITAL_PER_LOT", 200000.0) * config.NUM_LOTS
+        capital_base = max(allocated_capital, float(deployed_margin or 0.0))
+        max_allowed_loss_inr = capital_base * getattr(config, "STRADDLE_CAPITAL_SL_PCT", 0.02)
+        if self.pm.total_pnl <= -max_allowed_loss_inr:
+            loss_pct_actual = abs(self.pm.total_pnl) / capital_base * 100
+            print_banner("DYNAMIC CAPITAL 2.0% HARD STOP LOSS TRIGGERED")
+            reason = (
+                f"HARD_CAPITAL_SL: Total P&L {format_pnl(self.pm.total_pnl)} (-{loss_pct_actual:.2f}%) "
+                f"breached 2% Limit on Dynamic Capital Base {format_premium(capital_base)}"
+            )
+            logger.warning(f"🚨 [CAPITAL SL EXIT] {reason}")
+            self._close_all_positions(reason=reason)
+            return
+
+        # ─── GAP BREACH COMPENSATED ARMOR PROFIT TARGET (+2% ROI) ──
+        if self.pm.position.get("gap_breach_compensated", False):
+            current_roi = (self.pm.total_pnl / capital_base) if capital_base > 0 else 0.0
+            armor_target_roi = getattr(config, "STRADDLE_ARMOR_PROFIT_ROI_PCT", 0.02)
+            if current_roi >= armor_target_roi:
+                print_banner("GAP BREACH ARMOR PROFIT TARGET REACHED (+2% ROI)")
+                reason = f"GAP_BREACH_ARMOR_PROFIT: ROI +{current_roi*100:.2f}% >= +{armor_target_roi*100:.2f}% (Total P&L: {format_pnl(self.pm.total_pnl)})"
+                logger.info(f"[ARMOR PROFIT EXIT] {reason}")
+                self._close_all_positions(reason=reason)
+                return
+
         # ─── STRADDLE PHASE MONITORING & ACTIVE COMPENSATOR ───────
         if self.pm.is_straddle:
             # 1. Deploy Straddle Infinity Armor / Compensator if not yet deployed
@@ -552,8 +578,6 @@ class StrategyRunner:
                     logger.info("[STRADDLE ARMOR] Infinity Armor / Compensator successfully deployed.")
 
             # 2. Check Armor Profit Target (+2% ROI on dynamic capital base)
-            allocated_capital = getattr(config, "ALLOCATED_CAPITAL_PER_LOT", 200000.0) * config.NUM_LOTS
-            capital_base = max(allocated_capital, float(deployed_margin or 0.0))
             current_roi = (self.pm.total_pnl / capital_base) if capital_base > 0 else 0.0
             armor_target_roi = getattr(config, "STRADDLE_ARMOR_PROFIT_ROI_PCT", 0.02)
             if current_roi >= armor_target_roi:

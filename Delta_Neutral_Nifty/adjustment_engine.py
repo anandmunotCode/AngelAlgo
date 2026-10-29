@@ -862,6 +862,9 @@ class AdjustmentEngine:
             is_hedge=True,
         )
 
+        # Reset losing breached leg's baseline to live price to absorb the morning gap
+        breached_leg["surge_baseline_premium"] = breached_leg["current_premium"]
+
         # Update position state
         self.pm.position["gap_breach_active"] = False
         self.pm.position["gap_breach_compensated"] = True
