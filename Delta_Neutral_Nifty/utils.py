@@ -86,6 +86,8 @@ def is_market_open(dt=None):
     """Check if given datetime is within market hours (09:15 - 15:30 on expiry, 15:45 on non-expiry IST)."""
     if dt is None:
         dt = now_ist()
+    if dt.weekday() >= 5:
+        return False
     close_h, close_m = get_market_close_time(dt.date())
     market_open = dt.replace(
         hour=config.MARKET_OPEN_HOUR,
