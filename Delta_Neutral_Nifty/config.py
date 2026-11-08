@@ -142,6 +142,7 @@ MUHURAT_TRADING_DATES = {
         "close_buffer_min": 15,  # Stop entries at 15:25 IST
     }
 }
+MUHURAT_ENTRY_ENABLED = False     # Institutional discipline: No ad-hoc/mid-week entry on Muhurat day. Fresh entry on Wednesday only!
 MUHURAT_INTRADAY_ONLY = os.getenv("MUHURAT_INTRADAY_ONLY", "false").lower() == "true"
 
 # ═══════════════════════════════════════════════════════════════

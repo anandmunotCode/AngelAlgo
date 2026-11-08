@@ -178,11 +178,9 @@ class StrategyRunner:
                     self.ws_feeder.update_spot(spot)
                     self.ws_feeder.update_time_to_expiry(T)
 
-                # Phase 1: Initial entry if no open short legs (Starts Wednesday 09:18 IST OR Muhurat Trading)
+                # Phase 1: Initial entry if no open short legs (Strict Institutional Rule: Wednesday 09:18 IST only)
                 if not self.pm.open_short_legs:
-                    is_muhurat = is_muhurat_trading_day(now.date())
-                    is_cycle_day = (now.date().weekday() == config.CYCLE_START_DAY)
-                    if is_cycle_day or is_muhurat:
+                    if now.date().weekday() == config.CYCLE_START_DAY:
                         if is_entry_window(now):
                             self._execute_initial_entry(spot, T)
                         else:
