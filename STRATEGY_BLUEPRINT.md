@@ -197,5 +197,23 @@ Jab adjustments karte-karte Call Strike == Put Strike ($K$) ho jaye, toh positio
 
 ---
 
-*Blueprint Version: 3.0 (100-Point Dynamic Overnight Shield & SEBI CAS Adaptation)*  
-*Last Updated: 2026-10-22*
+## 7. DIWALI MUHURAT TRADING PROTOCOL (SPECIAL SESSION ARCHITECTURE)
+
+### NSE Circular (NSE/CMTR/76941) Timings:
+* **Date:** Sunday, November 8, 2026 (Diwali / Samvat 2083)
+* **Pre-Open Session:** 14:05 to 14:20 IST
+* **Continuous F&O Trading:** 14:20 to 15:40 IST (Total duration: 1 hr 20 min)
+* **Entry Window:** 14:23 IST (after 3-min opening volatility delay)
+* **Closing Buffer:** 15:25 IST (no new entries in final 15 mins)
+* **Overnight Shield Deployment:** 15:39 IST (1 min before 15:40 F&O close)
+* **Session Termination:** 15:40 IST (State committed to GitHub, EC2 clean shutdown)
+
+### Muhurat Execution Philosophy:
+1. **Weekend Filter Bypass:** System specifically recognizes configured `MUHURAT_TRADING_DATES`, bypassing normal weekend (`weekday >= 5`) suppression.
+2. **Nearest Expiry Focus:** Enters 0.15 Delta Short Strangle for upcoming weekly Tuesday expiry (10-Nov-2026), capturing rapid 2-day theta decay.
+3. **Overnight Gap Protection:** At 15:39 IST, deploys standard 100-pt Call and Put wings before market close, ensuring total capital protection over Sunday night into Monday opening.
+
+---
+
+*Blueprint Version: 3.1 (Diwali Muhurat Trading & Dynamic Session Support)*  
+*Last Updated: 2026-11-08*

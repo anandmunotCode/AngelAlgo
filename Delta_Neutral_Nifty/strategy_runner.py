@@ -19,7 +19,7 @@ from .utils import (
     setup_logger, now_ist, is_market_open, is_entry_window,
     get_current_expiry, is_expiry_day, time_to_expiry_years,
     get_atm_strike, print_banner, print_position_table, format_pnl, format_delta, format_premium,
-    get_market_close_time, get_shield_buy_time, IST,
+    get_market_close_time, get_shield_buy_time, get_market_open_time, is_muhurat_trading_day, IST,
 )
 from .angel_api import AngelOneAPI
 from .greeks_engine import find_strike_at_delta, calculate_portfolio_greeks, bs_price
@@ -148,10 +148,12 @@ class StrategyRunner:
                         self._close_all_positions("EXPIRY_CLOSE")
                     break
 
+                open_h, open_m = get_market_open_time(now.date())
                 close_h, close_m = get_market_close_time(now.date())
                 # Pre-market or post-market check
-                if now.hour < config.MARKET_OPEN_HOUR or (now.hour == config.MARKET_OPEN_HOUR and now.minute < config.MARKET_OPEN_MINUTE):
-                    logger.info("Pre-market. Waiting for 09:15 IST...")
+                if now.hour < open_h or (now.hour == open_h and now.minute < open_m):
+                    session_label = "Muhurat Trading Session" if is_muhurat_trading_day(now.date()) else "Normal Market Session"
+                    logger.info(f"Pre-market ({session_label}). Waiting for {open_h:02d}:{open_m:02d} IST...")
                     time.sleep(10)
                     continue
                 elif now.hour > close_h or (now.hour == close_h and now.minute >= close_m):
@@ -176,13 +178,20 @@ class StrategyRunner:
                     self.ws_feeder.update_spot(spot)
                     self.ws_feeder.update_time_to_expiry(T)
 
-                # Phase 1: Initial entry if no open short legs (Starts Wednesday 09:18 IST)
+                # Phase 1: Initial entry if no open short legs (Starts Wednesday 09:18 IST OR Muhurat Trading)
                 if not self.pm.open_short_legs:
-                    if now.date().weekday() == config.CYCLE_START_DAY:
+                    is_muhurat = is_muhurat_trading_day(now.date())
+                    is_cycle_day = (now.date().weekday() == config.CYCLE_START_DAY)
+                    if is_cycle_day or is_muhurat:
                         if is_entry_window(now):
                             self._execute_initial_entry(spot, T)
                         else:
-                            logger.debug(f"Waiting for 09:18 IST entry window (current: {now.strftime('%H:%M:%S')})...")
+                            open_h, open_m = get_market_open_time(now.date())
+                            entry_m = open_m + config.ENTRY_DELAY_MINUTES
+                            entry_h = open_h + (entry_m // 60)
+                            entry_m = entry_m % 60
+                            entry_time_str = f"{entry_h:02d}:{entry_m:02d}"
+                            logger.debug(f"Waiting for {entry_time_str} IST entry window (current: {now.strftime('%H:%M:%S')})...")
                     else:
                         logger.info(f"No open positions. Waiting for Wednesday 09:18 IST to initiate new weekly cycle. Today: {now.strftime('%A')}")
                         time.sleep(30)
@@ -522,13 +531,20 @@ class StrategyRunner:
                 self._close_all_positions(reason="EXPIRY_AUTO_SQUAREOFF_15:15")
                 return
 
+        # ─── OPTIONAL MUHURAT INTRADAY AUTO-SQUAREOFF (15:35 IST) ─
+        if is_muhurat_trading_day(now.date()) and getattr(config, "MUHURAT_INTRADAY_ONLY", False):
+            if now.hour == 15 and now.minute >= 35:
+                print_banner("MUHURAT INTRADAY AUTO-SQUAREOFF (15:35 IST)")
+                logger.info("Muhurat trading session ending. Auto-squaring off intraday position at 15:35 IST.")
+                self._close_all_positions(reason="MUHURAT_INTRADAY_AUTO_SQUAREOFF")
+                return
+
         # ─── PRE-CLOSE OVERNIGHT SHIELD DEPLOYMENT (NON-EXPIRY: 15:39 IST) ──
         # On Tuesday expiry, positions are squared off at 15:15 IST, so no shield is carried into Wednesday.
-        # On Non-Expiry days (Wed, Thu, Fri, Mon), dynamic 100-pt gap hedges are bought at 15:39 IST (1 min before 15:40 F&O close).
+        # On Non-Expiry days (Wed, Thu, Fri, Mon, Muhurat), dynamic 100-pt gap hedges are bought at 15:39 IST (1 min before 15:40 F&O close).
         if getattr(config, "OVERNIGHT_SHIELD_ENABLED", True) and not is_expiry_closing_today:
             if self.pm.open_short_legs:
-                buy_hour = config.SHIELD_BUY_HOUR_NON_EXPIRY
-                buy_minute = config.SHIELD_BUY_MINUTE_NON_EXPIRY
+                buy_hour, buy_minute = get_shield_buy_time(now.date())
                 if now.hour == buy_hour and now.minute >= buy_minute:
                     today_str = str(now.date())
                     if self.pm.position.get("last_shield_bought_date") != today_str:

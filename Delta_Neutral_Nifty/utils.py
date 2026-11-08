@@ -50,9 +50,37 @@ def now_ist():
     return datetime.now(IST)
 
 
+def is_muhurat_trading_day(check_date=None):
+    """Check if given date is an official Muhurat Trading day."""
+    if check_date is None:
+        check_date = now_ist().date()
+    elif isinstance(check_date, datetime):
+        check_date = check_date.date()
+    return check_date in getattr(config, "MUHURAT_TRADING_DATES", {})
+
+
+def get_market_open_time(check_date=None):
+    """
+    Get (hour, minute) for market open based on NSE rules:
+    - Muhurat trading: configured open time (e.g. 14:20 IST)
+    - Normal trading day: 09:15 IST
+    """
+    if check_date is None:
+        check_date = now_ist().date()
+    elif isinstance(check_date, datetime):
+        check_date = check_date.date()
+
+    if is_muhurat_trading_day(check_date):
+        schedule = config.MUHURAT_TRADING_DATES[check_date]
+        return (schedule.get("open_hour", 14), schedule.get("open_minute", 20))
+
+    return (config.MARKET_OPEN_HOUR, config.MARKET_OPEN_MINUTE)
+
+
 def get_market_close_time(check_date=None):
     """
     Get (hour, minute) for market close based on NSE rules:
+    - Muhurat trading: configured close time (e.g. 15:40 IST)
     - Expiry day: 15:30 IST
     - Non-expiry day: 15:40 IST (NSE Equity Derivatives Session Close)
     """
@@ -60,6 +88,10 @@ def get_market_close_time(check_date=None):
         check_date = now_ist().date()
     elif isinstance(check_date, datetime):
         check_date = check_date.date()
+
+    if is_muhurat_trading_day(check_date):
+        schedule = config.MUHURAT_TRADING_DATES[check_date]
+        return (schedule.get("close_hour", 15), schedule.get("close_minute", 40))
 
     if is_expiry_day(check_date):
         return (config.MARKET_CLOSE_HOUR_EXPIRY, config.MARKET_CLOSE_MINUTE_EXPIRY)
@@ -69,6 +101,7 @@ def get_market_close_time(check_date=None):
 def get_shield_buy_time(check_date=None):
     """
     Get (hour, minute) for deploying overnight shield:
+    - Muhurat trading: configured shield time (e.g. 15:39 IST)
     - Expiry day: 15:29 IST (1 min before 15:30 close)
     - Non-expiry day: 15:39 IST (exactly 1 min before 15:40 F&O close)
     """
@@ -77,28 +110,35 @@ def get_shield_buy_time(check_date=None):
     elif isinstance(check_date, datetime):
         check_date = check_date.date()
 
+    if is_muhurat_trading_day(check_date):
+        schedule = config.MUHURAT_TRADING_DATES[check_date]
+        return (schedule.get("shield_hour", 15), schedule.get("shield_minute", 39))
+
     if is_expiry_day(check_date):
         return (config.SHIELD_BUY_HOUR_EXPIRY, config.SHIELD_BUY_MINUTE_EXPIRY)
     return (config.SHIELD_BUY_HOUR_NON_EXPIRY, config.SHIELD_BUY_MINUTE_NON_EXPIRY)
 
 
 def is_market_open(dt=None):
-    """Check if given datetime is within market hours (09:15 - 15:30 on expiry, 15:45 on non-expiry IST)."""
+    """Check if given datetime is within market hours (handles Muhurat session and regular days)."""
     if dt is None:
         dt = now_ist()
+
+    # Check Muhurat Trading day (operates on weekend/holidays)
+    if is_muhurat_trading_day(dt.date()):
+        open_h, open_m = get_market_open_time(dt.date())
+        close_h, close_m = get_market_close_time(dt.date())
+        market_open = dt.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+        market_close = dt.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
+        return market_open <= dt <= market_close
+
     if dt.weekday() >= 5:
         return False
+
+    open_h, open_m = get_market_open_time(dt.date())
     close_h, close_m = get_market_close_time(dt.date())
-    market_open = dt.replace(
-        hour=config.MARKET_OPEN_HOUR,
-        minute=config.MARKET_OPEN_MINUTE,
-        second=0, microsecond=0
-    )
-    market_close = dt.replace(
-        hour=close_h,
-        minute=close_m,
-        second=0, microsecond=0
-    )
+    market_open = dt.replace(hour=open_h, minute=open_m, second=0, microsecond=0)
+    market_close = dt.replace(hour=close_h, minute=close_m, second=0, microsecond=0)
     return market_open <= dt <= market_close
 
 
@@ -106,10 +146,11 @@ def is_entry_window(dt=None):
     """Check if within safe entry window (after delay, before close buffer)."""
     if dt is None:
         dt = now_ist()
+    open_h, open_m = get_market_open_time(dt.date())
     close_h, close_m = get_market_close_time(dt.date())
     entry_start = dt.replace(
-        hour=config.MARKET_OPEN_HOUR,
-        minute=config.MARKET_OPEN_MINUTE,
+        hour=open_h,
+        minute=open_m,
         second=0, microsecond=0
     ) + timedelta(minutes=config.ENTRY_DELAY_MINUTES)
 

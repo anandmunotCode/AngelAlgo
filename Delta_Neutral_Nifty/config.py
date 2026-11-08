@@ -4,6 +4,7 @@ All parameters for the Iron Condor with Dynamic Adjustments.
 Tuned to institutional-grade (Jane Street-inspired) standards.
 """
 import os
+from datetime import date
 
 # ═══════════════════════════════════════════════════════════════
 # NIFTY CONTRACT SPECIFICATIONS
@@ -119,6 +120,29 @@ ENTRY_DELAY_MINUTES = 3            # Enter at 09:18 (3 mins after open)
 
 # Stop new entries this many minutes before close
 CLOSE_BUFFER_MINUTES = 15          # No new entries after 15:15 / 15:30
+
+# ═══════════════════════════════════════════════════════════════
+# DIWALI MUHURAT TRADING CONFIGURATION (SPECIAL FESTIVE SESSION)
+# ═══════════════════════════════════════════════════════════════
+# Official NSE Circular (NSE/CMTR/76941) Schedule:
+# - Pre-Open Session: 14:05 to 14:20 IST
+# - Normal / F&O Continuous Market: 14:20 to 15:40 IST
+# - Entry: 14:23 IST (3 mins delay after open)
+# - Overnight Shield Deployment: 15:39 IST (1 min before 15:40 close)
+MUHURAT_TRADING_DATES = {
+    date(2026, 11, 8): {
+        "name": "Diwali Muhurat Trading 2026 (Samvat 2083)",
+        "open_hour": 14,
+        "open_minute": 20,       # 14:20 IST F&O Market Open
+        "close_hour": 15,
+        "close_minute": 40,      # 15:40 IST F&O Market Close
+        "shield_hour": 15,
+        "shield_minute": 39,     # 15:39 IST Overnight Shield Deployment
+        "entry_delay_min": 3,    # 14:23 IST Entry (3 mins after open)
+        "close_buffer_min": 15,  # Stop entries at 15:25 IST
+    }
+}
+MUHURAT_INTRADAY_ONLY = os.getenv("MUHURAT_INTRADAY_ONLY", "false").lower() == "true"
 
 # ═══════════════════════════════════════════════════════════════
 # BLACK-SCHOLES MODEL PARAMETERS
